@@ -107,8 +107,8 @@ cat >$WORKDIR/node.xml <<EOF
       <source dev='$DISKPATH'/>
       <target dev='vda' bus='virtio'/>
     </disk>
-    <interface type='network'>
-      <source network='$NETWORK'/>
+    <interface type='$NETWORKTYPE'>
+      <source $NETWORKTYPE='$NETWORK'/>
       <model type='virtio'/>
     </interface>
     <serial type='pty'>
