@@ -1,0 +1,134 @@
+#!/bin/bash
+
+##############################################################################
+# configuration
+##############################################################################
+POOL=vmdata
+IMAGE=$HOME/base.img
+
+VM="$1"
+DISKSIZE="${2:-20}"
+MEMSIZE="${3:-1024}"
+CPUS="${4:-1}"
+
+##############################################################################
+# functions
+##############################################################################
+die() {
+    echo 1>&2 "ERROR:" "$@"
+    exit 1
+}
+
+usage() {
+    echo "usage: vmcreate name diskInGb memoryInMb numberOfCPUs"
+    exit 1
+}
+
+##############################################################################
+# sanity checks
+##############################################################################
+[ $# -lt 1 ] || [ $# -gt 4 ] && usage
+[ $DISKSIZE -ge "2" ] || die "disk size must be at least 2 gb"
+[ $MEMSIZE -ge "512" ] || die "memory size must be at least 512 mb"
+[ $CPUS -ge 1 ] || die "need at least one cpu"
+[ ! -e "/dev/$POOL/$VM" ] || die "disk for vm $VM already exists"
+virsh dominfo "$VM" >/dev/null 2>&1 && die "vm $VM already exists"
+
+##############################################################################
+# work dir
+##############################################################################
+WORKDIR=$(mktemp -d /tmp/vmcreateXXXXXX)
+trap "rm -rf -- '$WORKDIR'" EXIT
+
+##############################################################################
+# summary
+##############################################################################
+echo "creating vm $VM:"
+echo "  memory: $MEMSIZE mb"
+echo "  disk:   $DISKSIZE gb"
+echo "  cpus:   $CPUS"
+echo
+
+##############################################################################
+# main
+##############################################################################
+virsh vol-create-as --pool "$POOL" --name "$VM" --capacity "$DISKSIZE"G || die "can't create volume"
+DISKPATH=$(virsh vol-path --pool "$POOL" "$VM")
+
+virt-resize "$IMAGE" "$DISKPATH" --expand /dev/vda1 || die "can't initialize volume"
+sudo virt-sysprep -a "$DISKPATH" --hostname $VM --enable hostname,random-seed || die "can't prepare system volume"
+
+cat >$WORKDIR/node.xml <<EOF
+<domain type='kvm'>
+  <name>$VM</name>
+  <memory>$((MEMSIZE * 1024))</memory>
+  <currentMemory>$((MEMSIZE * 1024))</currentMemory>
+  <vcpu>$CPUS</vcpu>
+  <os>
+    <type arch='x86_64' machine='pc-1.0'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+    <pae/>
+  </features>
+  <cpu>
+    <arch>x86_64</arch>
+    <model>Westmere</model>
+    <vendor>Intel</vendor>
+    <topology sockets='1' cores='4' threads='2'/>
+    <feature name='abm'/>
+    <feature name='rdtscp'/>
+    <feature name='pdpe1gb'/>
+    <feature name='x2apic'/>
+    <feature name='xtpr'/>
+    <feature name='tm2'/>
+    <feature name='est'/>
+    <feature name='vmx'/>
+    <feature name='ds_cpl'/>
+    <feature name='monitor'/>
+    <feature name='pbe'/>
+    <feature name='tm'/>
+    <feature name='ht'/>
+    <feature name='ss'/>
+    <feature name='acpi'/>
+    <feature name='ds'/>
+    <feature name='vme'/>
+  </cpu>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>restart</on_crash>
+  <devices>
+    <emulator>/usr/bin/kvm</emulator>
+    <disk type='block' device='disk'>
+      <driver name='qemu' type='raw'/>
+      <source dev='$DISKPATH'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+    <interface type='network'>
+      <source network='default'/>
+      <model type='virtio'/>
+    </interface>
+    <serial type='pty'>
+      <target port='0'/>
+    </serial>
+    <console type='pty'>
+      <target type='serial' port='0'/>
+    </console>
+    <input type='mouse' bus='ps2'/>
+    <graphics type='vnc' port='-1' autoport='yes'/>
+    <video>
+      <model type='cirrus' vram='9216' heads='1'/>
+    </video>
+    <memballoon model='virtio'/>
+  </devices>
+</domain>
+EOF
+
+virsh define "$WORKDIR/node.xml"
+virsh start "$VM"
+virsh autostart "$VM"
+
+echo "IP: $(vmip "$VM")"
