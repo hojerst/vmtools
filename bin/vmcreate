@@ -1,17 +1,6 @@
 #!/bin/bash
 
 ##############################################################################
-# configuration
-##############################################################################
-POOL=vmdata
-IMAGE=$HOME/base.img
-
-VM="$1"
-DISKSIZE="${2:-20}"
-MEMSIZE="${3:-1024}"
-CPUS="${4:-1}"
-
-##############################################################################
 # functions
 ##############################################################################
 die() {
@@ -23,6 +12,17 @@ usage() {
     echo "usage: vmcreate name diskInGb memoryInMb numberOfCPUs"
     exit 1
 }
+
+##############################################################################
+# configuration
+##############################################################################
+[ -r "$HOME/.vmtoolsconfig" ] || die "no configuration file found"
+source "$HOME/.vmtoolsconfig"
+
+VM="$1"
+DISKSIZE="${2:-20}"
+MEMSIZE="${3:-1024}"
+CPUS="${4:-1}"
 
 ##############################################################################
 # sanity checks
@@ -108,7 +108,7 @@ cat >$WORKDIR/node.xml <<EOF
       <target dev='vda' bus='virtio'/>
     </disk>
     <interface type='network'>
-      <source network='default'/>
+      <source network='$NETWORK'/>
       <model type='virtio'/>
     </interface>
     <serial type='pty'>

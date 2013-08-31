@@ -1,0 +1,3 @@
+POOL=vmdata
+NETWORK=default
+IMAGE=$HOME/base.img
