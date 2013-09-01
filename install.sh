@@ -2,6 +2,8 @@
 
 cp -a bin "$HOME"
 
-if [ ! -e "$HOME/.vmtoolsconfig" ] ; then
-    cp config/sample "$HOME/.vmtoolsconfig"
+CONFDIR = "$HOME/.vmtools"
+if [ ! -e "$CONFDIR" ] ; then
+    mkdir -p "$CONFDIR"
+    cp -r config "$CONFDIR"
 fi
