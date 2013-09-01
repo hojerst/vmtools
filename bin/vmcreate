@@ -75,5 +75,3 @@ render "$HOME/.vmtools/node.xml" NAME=$VM MEMORY=$((MEMSIZE*1024)) VCPUS=$CPUS >
 virsh define "$WORKDIR/node.xml"
 virsh start "$VM"
 virsh autostart "$VM"
-
-echo "IP: $(vmip "$VM")"
