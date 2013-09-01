@@ -13,11 +13,23 @@ usage() {
     exit 1
 }
 
+# render a template
+render() {
+    TEMPLATE="$1"
+    shift
+
+    local "$@"
+
+    eval "cat <<TEMPLATE
+$(<$TEMPLATE)
+TEMPLATE"
+}
+
 ##############################################################################
 # configuration
 ##############################################################################
-[ -r "$HOME/.vmtoolsconfig" ] || die "no configuration file found"
-source "$HOME/.vmtoolsconfig"
+[ -r "$HOME/.vmtools/config" ] || die "no configuration file found"
+source "$HOME/.vmtools/config"
 
 VM="$1"
 DISKSIZE="${2:-20}"
@@ -58,74 +70,7 @@ DISKPATH=$(virsh vol-path --pool "$POOL" "$VM")
 virt-resize "$IMAGE" "$DISKPATH" --expand /dev/vda1 || die "can't initialize volume"
 sudo virt-sysprep -a "$DISKPATH" --hostname $VM --enable hostname,random-seed || die "can't prepare system volume"
 
-cat >$WORKDIR/node.xml <<EOF
-<domain type='kvm'>
-  <name>$VM</name>
-  <memory>$((MEMSIZE * 1024))</memory>
-  <currentMemory>$((MEMSIZE * 1024))</currentMemory>
-  <vcpu>$CPUS</vcpu>
-  <os>
-    <type arch='x86_64' machine='pc-1.0'>hvm</type>
-    <boot dev='hd'/>
-  </os>
-  <features>
-    <acpi/>
-    <apic/>
-    <pae/>
-  </features>
-  <cpu>
-    <arch>x86_64</arch>
-    <model>Westmere</model>
-    <vendor>Intel</vendor>
-    <topology sockets='1' cores='4' threads='2'/>
-    <feature name='abm'/>
-    <feature name='rdtscp'/>
-    <feature name='pdpe1gb'/>
-    <feature name='x2apic'/>
-    <feature name='xtpr'/>
-    <feature name='tm2'/>
-    <feature name='est'/>
-    <feature name='vmx'/>
-    <feature name='ds_cpl'/>
-    <feature name='monitor'/>
-    <feature name='pbe'/>
-    <feature name='tm'/>
-    <feature name='ht'/>
-    <feature name='ss'/>
-    <feature name='acpi'/>
-    <feature name='ds'/>
-    <feature name='vme'/>
-  </cpu>
-  <clock offset='utc'/>
-  <on_poweroff>destroy</on_poweroff>
-  <on_reboot>restart</on_reboot>
-  <on_crash>restart</on_crash>
-  <devices>
-    <emulator>/usr/bin/kvm</emulator>
-    <disk type='block' device='disk'>
-      <driver name='qemu' type='raw'/>
-      <source dev='$DISKPATH'/>
-      <target dev='vda' bus='virtio'/>
-    </disk>
-    <interface type='$NETWORKTYPE'>
-      <source $NETWORKTYPE='$NETWORK'/>
-      <model type='virtio'/>
-    </interface>
-    <serial type='pty'>
-      <target port='0'/>
-    </serial>
-    <console type='pty'>
-      <target type='serial' port='0'/>
-    </console>
-    <input type='mouse' bus='ps2'/>
-    <graphics type='vnc' port='-1' autoport='yes'/>
-    <video>
-      <model type='cirrus' vram='9216' heads='1'/>
-    </video>
-    <memballoon model='virtio'/>
-  </devices>
-</domain>
-EOF
+render "$HOME/.vmtools/node.xml" NAME=$VM MEMORY=$((MEMSIZE*1024)) VCPUS=$CPUS >$WORKDIR/node.xml
 
 virsh define "$WORKDIR/node.xml"
 virsh start "$VM"
