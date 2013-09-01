@@ -52,11 +52,11 @@ apt-get dist-upgrade -y
 rm /etc/init.d/firstboot
 rm /etc/rc?.d/S99firstboot
 EOF
-virt-copy-in -a "$WORKDIR/disk.img" "$WORKDIR/firstboot" /etc/init.d || die "can't create firstboot script"
 
 guestfish -a "$WORKDIR/disk.img" <<EOF
 run
 mount /dev/vda1 /
+copy-in $WORKDIR/firstboot /etc/init.d
 chmod 0755 /etc/init.d/firstboot
 ln-s ../init.d/firstboot /etc/rc1.d/S99firstboot
 ln-s ../init.d/firstboot /etc/rc2.d/S99firstboot

@@ -28,8 +28,10 @@ TEMPLATE"
 ##############################################################################
 # configuration
 ##############################################################################
-[ -r "$HOME/.vmtools/config" ] || die "no configuration file found"
-source "$HOME/.vmtools/config"
+CONFDIR="$HOME/.vmtools"
+
+[ -r "$CONFDIR/config" ] || die "no configuration file found"
+source "$CONFDIR/config"
 
 VM="$1"
 DISKSIZE="${2:-20}"
@@ -69,6 +71,12 @@ DISKPATH=$(virsh vol-path --pool "$POOL" "$VM")
 
 virt-resize "$IMAGE" "$DISKPATH" --expand /dev/vda1 || die "can't initialize volume"
 sudo virt-sysprep -a "$DISKPATH" --hostname $VM --enable hostname,random-seed || die "can't prepare system volume"
+guestfish -a "$DISKPATH" <<EOF
+run
+mount /dev/vda1 /
+mkdir /home/hojerst/.ssh
+copy-in $CONFDIR/authorized_keys /home/hojerst/.ssh
+EOF
 
 render "$HOME/.vmtools/node.xml" NAME=$VM MEMORY=$((MEMSIZE*1024)) VCPUS=$CPUS >$WORKDIR/node.xml
 
