@@ -1,5 +1,14 @@
-# storage pool for vms
+# storage pool for disks
 POOL=vmdata
+
+# default memory size in mb
+DEFAULT_MEMORY=1024
+
+# default disk size in gb
+DEFAULT_DISKSIZE=20
+
+# default number of cpus
+DEFAULT_VCPUS=1
 
 # image to use for primary hdd
 IMAGE=$HOME/base.img

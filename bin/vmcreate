@@ -34,9 +34,9 @@ CONFDIR="$HOME/.vmtools"
 source "$CONFDIR/config"
 
 VM="$1"
-DISKSIZE="${2:-20}"
-MEMSIZE="${3:-1024}"
-CPUS="${4:-1}"
+DISKSIZE="${2:-$DEFAULT_DISKSIZE}"
+MEMSIZE="${3:-$DEFAULT_MEMORY}"
+CPUS="${4:-$DEFAULT_VCPUS}"
 
 ####################################################################
 # sanity checks
