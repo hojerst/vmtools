@@ -42,8 +42,8 @@
       <source dev='$DISKPATH'/>
       <target dev='vda' bus='virtio'/>
     </disk>
-    <interface type='$NETWORKTYPE'>
-      <source $NETWORKTYPE='$NETWORK'/>
+    <interface type='network'>
+      <source network='default'/>
       <model type='virtio'/>
     </interface>
     <serial type='pty'>

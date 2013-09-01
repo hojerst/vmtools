@@ -1,11 +1,5 @@
 # storage pool for vms
 POOL=vmdata
 
-# type of network connection (network or bridge)
-NETWORKTYPE=network
-
-# network or interface name (dependeing on NETWORKTYPE)
-NETWORK=default
-
 # image to use for primary hdd
 IMAGE=$HOME/base.img
