@@ -12,31 +12,13 @@
     <apic/>
     <pae/>
   </features>
-  <cpu match='exact'>
-    <model>Westmere</model>
-    <vendor>Intel</vendor>
-    <feature policy='require' name='tm2'/>
-    <feature policy='require' name='est'/>
-    <feature policy='require' name='monitor'/>
-    <feature policy='require' name='ss'/>
-    <feature policy='require' name='vme'/>
-    <feature policy='require' name='rdtscp'/>
-    <feature policy='require' name='ht'/>
-    <feature policy='require' name='ds'/>
-    <feature policy='require' name='pbe'/>
-    <feature policy='require' name='tm'/>
-    <feature policy='require' name='vmx'/>
-    <feature policy='require' name='ds_cpl'/>
-    <feature policy='require' name='xtpr'/>
-    <feature policy='require' name='acpi'/>
-    <feature policy='require' name='x2apic'/>
-  </cpu>
+  <cpu mode='host-passthrough'/>
   <clock offset='utc'/>
   <on_poweroff>destroy</on_poweroff>
   <on_reboot>restart</on_reboot>
   <on_crash>restart</on_crash>
   <devices>
-    <emulator>/usr/bin/kvm</emulator>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw'/>
       <source dev='$DISKPATH'/>
