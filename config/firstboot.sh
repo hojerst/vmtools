@@ -9,6 +9,3 @@ dpkg-reconfigure openssh-server
 
 # install chef
 curl -L https://www.opscode.com/chef/install.sh | bash
-
-# reboot system to get all updates
-reboot
