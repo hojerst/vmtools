@@ -10,7 +10,8 @@ fi
 ###########################################################################
 VM=$1
 POOL=vmdata
-TARGETDIR="$HOME"
+TARGETDIR="$HOME/.vmtools/images"
+TARGETIMAGE="$TARGETDIR/${VM}.img"
 
 ###########################################################################
 # functions
@@ -25,6 +26,8 @@ die() {
 ###########################################################################
 
 [ $UID -eq 0 ] || die "this script should be run as root"
+[ ! -e $TARGETIMAGE ] || die "$TARGETIMAGE already exists"
+
 [ "$(virsh domstate "$VM")" == "shut off" ] || die "vm $VM needs to be powered off. (run: virsh shutdown $VM)"
 
 # find path for volume
@@ -41,6 +44,8 @@ trap "rm -rf -- '$WORKDIR'" EXIT
 # main
 ###########################################################################
 
+mkdir -p "$TARGETDIR"
+
 echo "creating image from source disk"
 qemu-img convert "$SOURCEDISK" "$WORKDIR/disk.img" -O qcow2
 
@@ -48,4 +53,4 @@ echo "preparing system for distribution"
 virt-sysprep -a "$WORKDIR/disk.img"
 
 echo "creating compressed sparse image"
-virt-sparsify "$WORKDIR/disk.img" "$TARGETDIR/$VM.img" --compress
+virt-sparsify "$WORKDIR/disk.img" "$TARGETIMAGE" --compress
