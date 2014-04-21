@@ -1,74 +1,51 @@
 #!/bin/bash
 
-##############################################################################
+if [ $# -ne 1 ] ; then
+    echo "usage: $(basename $0) vmname"
+    exit 1
+fi
+
+###########################################################################
 # configuration
-##############################################################################
-VM=${1:-base}
+###########################################################################
+VM=$1
 POOL=vmdata
 TARGETDIR="$HOME"
 
-##############################################################################
+###########################################################################
 # functions
-##############################################################################
+###########################################################################
 die() {
     echo 1>&2 "ERROR:" "$@"
     exit 1
 }
 
-##############################################################################
+###########################################################################
 # sanity checks
-##############################################################################
+###########################################################################
+
+[ $UID -eq 0 ] || die "this script should be run as root"
+[ "$(virsh domstate "$VM")" == "shut off" ] || die "vm $VM needs to be powered off. (run: virsh shutdown $VM)"
 
 # find path for volume
 SOURCEDISK=$(virsh vol-path --pool "$POOL" "$VM")
-
-[ "$(virsh domstate "$VM")" == "shut off" ] || die "vm $VM needs to be powered off. (run: virsh shutdown $VM)"
 [ -r "$SOURCEDISK" ] || die "source disk $SOURCEDISK is not readable."
 
-##############################################################################
+###########################################################################
 # work dir
-##############################################################################
+###########################################################################
 WORKDIR=$(mktemp -d /tmp/vmpackageXXXXXX)
 trap "rm -rf -- '$WORKDIR'" EXIT
 
-##############################################################################
+###########################################################################
 # main
-##############################################################################
+###########################################################################
 
-# copy source disk
+echo "creating image from source disk"
 qemu-img convert "$SOURCEDISK" "$WORKDIR/disk.img" -O qcow2
 
-# cleanup disk image (prepare clonable image)
-sudo virt-sysprep -a "$WORKDIR/disk.img"
+echo "preparing system for distribution"
+virt-sysprep -a "$WORKDIR/disk.img"
 
-# create script which runs on first boot
-cat >"$WORKDIR/firstboot" <<EOF
-#!/bin/sh
-
-dpkg-reconfigure openssh-server
-apt-get update
-apt-get dist-upgrade -y
-
-rm /etc/init.d/firstboot
-rm /etc/rc?.d/S99firstboot
-EOF
-
-guestfish -a "$WORKDIR/disk.img" <<EOF
-run
-mount /dev/vda1 /
-copy-in $WORKDIR/firstboot /etc/init.d
-chmod 0755 /etc/init.d/firstboot
-ln-s ../init.d/firstboot /etc/rc1.d/S99firstboot
-ln-s ../init.d/firstboot /etc/rc2.d/S99firstboot
-ln-s ../init.d/firstboot /etc/rc3.d/S99firstboot
-ln-s ../init.d/firstboot /etc/rc4.d/S99firstboot
-ln-s ../init.d/firstboot /etc/rc5.d/S99firstboot
-ln-s ../init.d/firstboot /etc/rc6.d/S99firstboot
-ln-s ../init.d/firstboot /etc/rcS.d/S99firstboot
-EOF
-
-# create sparse image of disk
-virt-sparsify "$WORKDIR/disk.img" "$WORKDIR/sparse.img"
-
-# create compressed image
-qemu-img convert "$WORKDIR/sparse.img" "$TARGETDIR/$VM.img" -O qcow2 -c
+echo "creating compressed sparse image"
+virt-sparsify "$WORKDIR/disk.img" "$TARGETDIR/$VM.img" --compress
