@@ -11,4 +11,7 @@ DEFAULT_DISKSIZE=20
 DEFAULT_VCPUS=1
 
 # image to use for primary hdd
-IMAGE=$HOME/base.img
+IMAGE=images/ubuntu-14.04.img
+
+# startup script for vm
+FIRSTBOOTSCRIPT=firstboot.sh
