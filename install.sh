@@ -1,11 +1,11 @@
 #!/bin/sh
 
-cp -a bin "$HOME"
-
 CONFDIR="$HOME/.vmtools"
+IMAGEDIR="$CONFDIR/images"
+
+cp -a bin "$HOME"
 if [ ! -e "$CONFDIR" ] ; then
     cp -a config/ "$CONFDIR"
 fi
 
-IMAGEDIR="$CONFDIR/images"
 mkdir -p "$IMAGEDIR"
