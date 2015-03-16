@@ -1,14 +1,22 @@
+##############################################################################
+# configuration
+##############################################################################
+
 # storage pool for disks
 POOL=vmdata
 
-# default memory size in mb
-DEFAULT_MEMORY=1024
+##############################################################################
+# default values
+##############################################################################
 
-# default disk size in gb
-DEFAULT_DISKSIZE=20
+# memory size in mb
+MEMSIZE=1024
 
-# default number of cpus
-DEFAULT_VCPUS=1
+# disk size in gb
+DISKSIZE=20
 
-# default image
-DEFAULT_IMAGE=ubuntu-14.04
+# number of virtual cpus
+VCPUS=8
+
+# image
+IMAGE=ubuntu-14.04

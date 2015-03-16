@@ -9,7 +9,19 @@ die() {
 }
 
 usage() {
-    echo "usage: vmcreate name diskInGb memoryInMb numberOfCPUs"
+    cat <<EOF
+NAME
+    vmcreate - create a virtual machine from an image
+
+SYNOPSIS
+    vmcreate [options] name
+
+OPTIONS
+    --disksize=<size>   disk size in GB
+    --memsize=<size>    memory size in MB
+    --vcpus=<count>     number of virtual cpus
+    --image=<name>      name of image to use
+EOF
     exit 1
 }
 
@@ -25,29 +37,93 @@ $(<$TEMPLATE)
 TEMPLATE"
 }
 
+# parse positional parameter
+parsepositional() {
+    local pos="$1"
+    local arg="$2"
+
+    case "$pos" in
+        x)
+            NAME="$arg"
+            ;;
+        *)
+            echo 1>&2 "unknown argument: '$arg'"
+            exit 1
+            ;;
+    esac
+}
+
+# parse arguments
+parseargs() {
+    local pos="x"
+
+    while [ $# -ge 1 ] ; do
+        case "$1" in
+            --help)
+                usage
+                ;;
+            --disksize=*)
+                DISKSIZE="${1##*=}"
+                ;;
+            --memsize=*)
+                MEMSIZE="${1##*=}"
+                ;;
+            --vcpus=*)
+                CPUS="${1##*=}"
+                ;;
+            --image=*)
+                IMAGE="${1##*=}"
+                ;;
+            --)
+                shift
+                break
+                ;;
+            --*)
+                echo 1>&2 "unknown option '$1' - ignored."
+                ;;
+            *)
+                parsepositional "$pos" "$1"
+                pos="x$pos"
+                ;;
+        esac
+        shift
+    done
+
+    # parse remaining positional arguments
+    while [ $# -ge 1 ] ; do
+        parsepositional "$pos" "$1"
+        pos="x$pos"
+        shift
+    done
+
+    # check if all positional arguments where provided
+    if [ "$pos" != "xx" ] ; then
+        echo 1>&2 "missing argument."
+        echo
+        usage
+    fi
+}
+
 ##############################################################################
 # configuration
 ##############################################################################
-CONFDIR="$HOME/.vmtools"
+readonly CONFDIR="$HOME/.vmtools"
+readonly IMAGEDIR="$CONFDIR/images"
 
 [ -r "$CONFDIR/config" ] || die "no configuration file found"
 source "$CONFDIR/config"
 
-VM="$1"
-DISKSIZE="${2:-$DEFAULT_DISKSIZE}"
-MEMSIZE="${3:-$DEFAULT_MEMORY}"
-CPUS="${4:-$DEFAULT_VCPUS}"
+parseargs "$@"
 
 ##############################################################################
 # sanity checks
 ##############################################################################
-[ $UID -eq 0 ] || die "this script must be run as root"
-[ $# -lt 1 ] || [ $# -gt 4 ] && usage
 [ $DISKSIZE -ge "2" ] || die "disk size must be at least 2 gb"
 [ $MEMSIZE -ge "512" ] || die "memory size must be at least 512 mb"
-[ $CPUS -ge 1 ] || die "need at least one cpu"
-[ ! -e "/dev/$POOL/$VM" ] || die "disk for vm $VM already exists"
-virsh dominfo "$VM" >/dev/null 2>&1 && die "vm $VM already exists"
+[ $VCPUS -ge 1 ] || die "need at least one cpu"
+[ -d $IMAGEDIR/$IMAGE ] || die "image $IMAGE not found"
+[ ! -e "/dev/$POOL/$NAME" ] || die "disk for vm $NAME already exists"
+virsh dominfo "$NAME" >/dev/null 2>&1 && die "vm $NAME already exists"
 
 ##############################################################################
 # work dir
@@ -58,10 +134,10 @@ trap "rm -rf -- '$WORKDIR'" EXIT
 ##############################################################################
 # summary
 ##############################################################################
-echo "creating vm $VM:"
+echo "creating vm $NAME:"
 echo "  memory: $MEMSIZE mb"
 echo "  disk:   $DISKSIZE gb"
-echo "  cpus:   $CPUS"
+echo "  cpus:   $VCPUS"
 echo "  image:  $IMAGE"
 echo
 
@@ -69,19 +145,19 @@ echo
 # main
 ##############################################################################
 
-cd "$CONFDIR"
+cd "$IMAGEDIR/$IMAGE"
 
 echo "creating disk"
-virsh vol-create-as --pool "$POOL" --name "$VM" --capacity "$DISKSIZE"G || die "can't create volume"
-DISKPATH=$(virsh vol-path --pool "$POOL" "$VM")
+virsh vol-create-as --pool "$POOL" --name "$NAME" --capacity "$DISKSIZE"G || die "can't create volume"
+DISKPATH=$(virsh vol-path --pool "$POOL" "$NAME")
 
 echo "expanding image to full disk size"
-virt-resize "$IMAGE" "$DISKPATH" --expand /dev/vda1 || die "can't initialize volume"
+virt-resize "disk1.img" "$DISKPATH" --expand /dev/vda1 || die "can't initialize volume"
 
 echo "preparing system for first boot"
 virt-sysprep -a "$DISKPATH" \
-    --hostname "$VM" \
-    --firstboot "$FIRSTBOOTSCRIPT" || die "can't prepare system volume"
+    --hostname "$NAME" \
+    --firstboot "firstboot.sh" || die "can't prepare system volume"
 
 echo "installing ssh keys"
 guestfish -a "$DISKPATH" <<EOF
@@ -93,9 +169,9 @@ chown 0 0 /root/.ssh/authorized_keys
 EOF
 
 echo "creating vm"
-render "$HOME/.vmtools/node.xml" NAME=$VM MEMORY=$((MEMSIZE*1024)) VCPUS=$CPUS >$WORKDIR/node.xml
+render "node.xml" NAME="$NAME" MEMORY="$MEMSIZE" VCPUS="$VCPUS" DISKPATH="$DISKPATH" >$WORKDIR/node.xml
 virsh define "$WORKDIR/node.xml"
 
 echo "starting vm"
-virsh start "$VM"
-virsh autostart "$VM"
+virsh start "$NAME"
+virsh autostart "$NAME"
