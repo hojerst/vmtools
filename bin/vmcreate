@@ -104,6 +104,13 @@ parseargs() {
     fi
 }
 
+callhook() {
+    readonly hook="$1"
+    shift
+
+    env NAME="$NAME" CONFDIR="$CONFDIR" "$hook" "$@"
+}
+
 ##############################################################################
 # configuration
 ##############################################################################
@@ -151,22 +158,12 @@ echo "creating disk"
 virsh vol-create-as --pool "$POOL" --name "$NAME" --capacity "$DISKSIZE"G || die "can't create volume"
 DISKPATH=$(virsh vol-path --pool "$POOL" "$NAME")
 
-echo "expanding image to full disk size"
-virt-resize "disk1.img" "$DISKPATH" --expand /dev/vda1 || die "can't initialize volume"
-
-echo "preparing system for first boot"
-virt-sysprep -a "$DISKPATH" \
-    --hostname "$NAME" \
-    --firstboot "firstboot.sh" || die "can't prepare system volume"
-
-echo "installing ssh keys"
-guestfish -a "$DISKPATH" <<EOF
-run
-mount /dev/sda1 /
-mkdir /root/.ssh
-copy-in $CONFDIR/authorized_keys /root/.ssh
-chown 0 0 /root/.ssh/authorized_keys
-EOF
+echo "installing disk image"
+if [ -x ./install-disk.sh ] ; then
+    callhook ./install-disk.sh disk1.img "$DISKPATH"
+else
+    qemu-img convert disk1.img "$DISKPATH" -O raw
+fi
 
 echo "creating vm"
 render "node.xml" NAME="$NAME" MEMORY="$MEMSIZE" VCPUS="$VCPUS" DISKPATH="$DISKPATH" >$WORKDIR/node.xml
