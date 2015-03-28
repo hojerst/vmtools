@@ -147,6 +147,11 @@ echo "  disk:   $DISKSIZE gb"
 echo "  cpus:   $VCPUS"
 echo "  image:  $IMAGE"
 echo
+echo "continue [Y/n]? "
+read answer
+if [ "$answer" != "y" ] && [ "$answer" != "Y" ] && [ "$answer" != "" ] ; then
+    exit 0
+fi
 
 ##############################################################################
 # main
