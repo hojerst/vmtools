@@ -1,4 +1,6 @@
-#!/usr/bin/sudo /bin/bash
+#!/bin/bash
+
+set -e
 
 ##############################################################################
 # functions
@@ -98,7 +100,7 @@ parseargs() {
 
     # check if all positional arguments where provided
     if [ "$pos" != "xx" ] ; then
-        echo 1>&2 "missing argument."
+        echo 1>&2 "missing/insufficient arguments."
         echo
         usage
     fi
