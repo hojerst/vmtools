@@ -1,0 +1,117 @@
+#!/bin/bash
+
+set -e
+
+###########################################################################
+# functions
+###########################################################################
+die() {
+    echo 1>&2 "ERROR:" "$@"
+    exit 1
+}
+
+usage() {
+    cat <<EOF
+NAME
+    uploadimage - upload an image to a volume pool
+
+SYNOPSIS
+    uploadimage [options] file volumename
+
+OPTIONS
+    --pool=<name>      pool name to store the volume (default: default)
+EOF
+    exit 1
+}
+
+# parse positional parameter
+parsepositional() {
+    local pos="$1"
+    local arg="$2"
+
+    case "$pos" in
+        x)
+            IMAGEFILE="$arg"
+            ;;
+        xx)
+            VOLUMENAME="$arg"
+            ;;
+        *)
+            echo 1>&2 "unknown argument: '$arg'"
+            exit 1
+            ;;
+    esac
+}
+
+# parse arguments
+parseargs() {
+    local pos="x"
+
+    while [ $# -ge 1 ] ; do
+        case "$1" in
+            --help)
+                usage
+                ;;
+            --pool=*)
+                POOL="${1##*=}"
+                ;;
+            --)
+                shift
+                break
+                ;;
+            --*)
+                echo 1>&2 "unknown option '$1' - ignored."
+                ;;
+            *)
+                parsepositional "$pos" "$1"
+                pos="x$pos"
+                ;;
+        esac
+        shift
+    done
+
+    # parse remaining positional arguments
+    while [ $# -ge 1 ] ; do
+        parsepositional "$pos" "$1"
+        pos="x$pos"
+        shift
+    done
+
+    # check if all positional arguments where provided
+    if [ "$pos" != "xxx" ] ; then
+        echo 1>&2 "missing/insufficient arguments."
+        echo
+        usage
+    fi
+}
+
+
+###########################################################################
+# defaults
+###########################################################################
+
+POOL="default"
+
+###########################################################################
+# parse arguments
+###########################################################################
+
+parseargs "$@"
+
+###########################################################################
+# sanity checks
+###########################################################################
+
+[ -r "$IMAGEFILE" ] || die "$IMAGEFILE doesn't exist or is not readable"
+
+###########################################################################
+# main
+###########################################################################
+
+SIZE="$((1024 * $(du -k "$IMAGEFILE" | cut -f1)))"
+
+echo "creating volume with ($SIZE bytes)"
+virsh vol-create-as --pool "$POOL" --name "$VOLUMENAME" --capacity "$SIZE"
+
+echo "uploading image"
+virsh vol-upload --vol "$VOLUMENAME" --file "$IMAGEFILE" --pool "$POOL"
