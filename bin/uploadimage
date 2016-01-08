@@ -150,9 +150,6 @@ parseargs "$@"
 readonly COMPRESSOR=$(get_compressor "$IMAGEFILE")
 readonly SIZE=$(${COMPRESSOR}_get_size $IMAGEFILE)
 
-echo $COMPRESSOR: $SIZE
-exit 0
-
 echo "creating volume with ($SIZE bytes)"
 virsh vol-create-as --pool "$POOL" --name "$VOLUMENAME" --capacity "$SIZE"
 
