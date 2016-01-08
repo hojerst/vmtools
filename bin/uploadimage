@@ -85,8 +85,44 @@ parseargs() {
     fi
 }
 
-isgzip() {
-    [[ "$1" == *.gz ]]
+get_compressor() {
+    case "$1" in
+        *.gz)
+            echo gz
+            ;;
+        *.bz2)
+            echo bz2
+            ;;
+        *)
+            echo none
+            ;;
+    esac
+}
+
+gz_get_size() {
+    gzip -l "$1" | sed -e '1d' -e '2 s/^ \+//' -e '2 s/ \+/\t/g' | cut -f2
+}
+
+bz2_get_size() {
+    # unfortunately bzip2 has no "-l" option so we need to
+    # brute-force the size
+    bz2_get_contents "$1" | wc -c
+}
+
+none_get_size() {
+    wc -c "$1" | cut -f1 -d' '
+}
+
+gz_get_contents() {
+    gzip -dc "$1"
+}
+
+bz2_get_contents() {
+    bzip2 -dc "$1"
+}
+
+none_get_contents() {
+    cat "$1"
 }
 
 ###########################################################################
@@ -111,18 +147,14 @@ parseargs "$@"
 # main
 ###########################################################################
 
-if isgzip "$IMAGEFILE" ; then
-    SIZE="$(gzip -l "$IMAGEFILE" | sed -e '1d' -e '2 s/^ \+//' -e '2 s/ \+/\t/g' | cut -f2)"
-else
-    SIZE="$((1024 * $(du -k "$IMAGEFILE" | cut -f1)))"
-fi
+readonly COMPRESSOR=$(get_compressor "$IMAGEFILE")
+readonly SIZE=$(${COMPRESSOR}_get_size $IMAGEFILE)
+
+echo $COMPRESSOR: $SIZE
+exit 0
 
 echo "creating volume with ($SIZE bytes)"
 virsh vol-create-as --pool "$POOL" --name "$VOLUMENAME" --capacity "$SIZE"
 
 echo "uploading image"
-if isgzip "$IMAGEFILE" ; then
-    gzip -c "$IMAGEFILE" | virsh vol-upload --vol "$VOLUMENAME" --file /dev/stdin --pool "$POOL"
-else
-    virsh vol-upload --vol "$VOLUMENAME" --file "$IMAGEFILE" --pool "$POOL"
-fi
+${COMPRESSORT}_get_contents "$IMAGEFILE" | virsh vol-upload --vol "$VOLUMENAME" --file /dev/stdin --pool "$POOL"
