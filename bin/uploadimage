@@ -85,6 +85,9 @@ parseargs() {
     fi
 }
 
+isgzip() {
+    [[ "$1" == *.gz ]]
+}
 
 ###########################################################################
 # defaults
@@ -108,10 +111,18 @@ parseargs "$@"
 # main
 ###########################################################################
 
-SIZE="$((1024 * $(du -k "$IMAGEFILE" | cut -f1)))"
+if isgzip "$IMAGEFILE" ; then
+    SIZE="$(gzip -l "$IMAGEFILE" | sed -e '1d' -e '2 s/^ \+//' -e '2 s/ \+/\t/g' | cut -f2)"
+else
+    SIZE="$((1024 * $(du -k "$IMAGEFILE" | cut -f1)))"
+fi
 
 echo "creating volume with ($SIZE bytes)"
 virsh vol-create-as --pool "$POOL" --name "$VOLUMENAME" --capacity "$SIZE"
 
 echo "uploading image"
-virsh vol-upload --vol "$VOLUMENAME" --file "$IMAGEFILE" --pool "$POOL"
+if isgzip "$IMAGEFILE" ; then
+    gzip -c "$IMAGEFILE" | virsh vol-upload --vol "$VOLUMENAME" --file /dev/stdin --pool "$POOL"
+else
+    virsh vol-upload --vol "$VOLUMENAME" --file "$IMAGEFILE" --pool "$POOL"
+fi
