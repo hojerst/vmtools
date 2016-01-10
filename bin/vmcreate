@@ -167,7 +167,7 @@ get_contents() {
 
 get_device() {
     local ALPHA=abcdefghijklmnopqrstuvwxyz
-    echo vd${ALPHA[$1]}
+    echo vd${ALPHA:$((i-1)):1}
 }
 
 check_disks() {
