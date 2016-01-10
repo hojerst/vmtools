@@ -110,14 +110,6 @@ parseargs() {
     fi
 }
 
-callhook() {
-    readonly hook="$1"
-    shift
-
-    env NAME="$NAME" CONFDIR="$CONFDIR" "$hook" "$@"
-}
-
-
 to_bytes() {
     readonly input="$1"
     local size
@@ -157,7 +149,16 @@ to_bytes() {
 }
 
 get_size() {
-    gzip -l "$1" | sed -e '1d' -e '2 s/  */ /g' -e "2 s/^ //" | cut -f2 -d" "
+    local file="$1"
+
+    case "$file" in
+        *.gz)
+            gzip -l "$file" | sed -e '1d' -e '2 s/  */ /g' -e "2 s/^ //" | cut -f2 -d" "
+            ;;
+        *)
+            wc -c "$file" | sed -e 's/  */ /g' -e "s/^ //" | cut -f1 -d" "
+            ;;
+    esac
 }
 
 get_contents() {
@@ -193,6 +194,19 @@ check_disks() {
         i=$((i+1))
         NUMDISKS=$i
     done
+}
+
+create_iso() {
+    local iso="$1"
+    local src="$2"
+
+    if which hdiutil >/dev/null 2>&1 ; then
+        hdiutil makehybrid -o "$iso" "$src" -iso -joliet
+    elif which mkisofs >/dev/null 2>&1 ; then
+        mkisofs -J -o "$iso" "$src"
+    else
+        die "no iso disk creator found (tried hdiutil and mkisofs)"
+    fi
 }
 
 ##############################################################################
@@ -235,6 +249,8 @@ for ((i=0; i < $NUMDISKS; i++)) ; do
     virsh vol-info --pool="$POOL" "$NAME-disk$i" >/dev/null 2<&1 && die "disk$i for vm $NAME already exists"
 done
 
+virsh vol-info --pool="$POOL" "$NAME-config" >/dev/null 2<&1 && die "config for vm $NAME already exists"
+
 ##############################################################################
 # summary
 ##############################################################################
@@ -257,11 +273,22 @@ fi
 # work dir
 ##############################################################################
 WORKDIR=$(mktemp -d /tmp/vmcreateXXXXXX)
-trap "rm -rf -- '$WORKDIR'" EXIT
+#trap "rm -rf -- '$WORKDIR'" EXIT
 
 ##############################################################################
 # main
 ##############################################################################
+
+echo "creating cloud-init image..."
+mkdir "$WORKDIR/config-drive"
+NAME=$NAME render "user-data" >"$WORKDIR/config-drive/user-data"
+create_iso "$WORKDIR/config.iso" "$WORKDIR/config-drive"
+
+echo "creating cloud-init volume..."
+virsh vol-create-as --pool "$POOL" --name "$NAME-config" --capacity $(get_size "$WORKDIR/config.iso") || die "failed to create volume"
+
+echo "uploading cloud-init image..."
+virsh vol-upload --pool "$POOL" --vol "$NAME-config" --file "$WORKDIR/config.iso" || die "failed to upload image"
 
 for ((i=0; i < $NUMDISKS; i++)) ; do
     echo "creating disk$i..."
@@ -269,55 +296,17 @@ for ((i=0; i < $NUMDISKS; i++)) ; do
 done
 
 for ((i=0; i < $NUMDISKS; i++)) ; do
-    echo "loading image for disk$i..."
+    echo "uploading image for disk$i..."
     get_contents disk$i.img.gz | virsh vol-upload --pool "$POOL" --vol "$NAME-disk$i" --file /dev/stdin || die "failed to upload image"
 done
 
 echo "creating domain..."
-cat >"$WORKDIR/node.xml" <<EOF
-<domain type='kvm'>
-  <name>$NAME</name>
-  <memory unit="b">$MEMSIZE_BYTES</memory>
-  <vcpu>$VCPUS</vcpu>
-  <os>
-    <type arch='x86_64' machine='pc-1.0'>hvm</type>
-    <boot dev='hd'/>
-  </os>
-  <features>
-    <acpi/>
-    <apic/>
-    <pae/>
-  </features>
-  <cpu mode='host-passthrough'/>
-  <clock offset='utc'/>
-  <on_poweroff>destroy</on_poweroff>
-  <on_reboot>restart</on_reboot>
-  <on_crash>restart</on_crash>
-  <devices>
-    <emulator>/usr/bin/qemu-system-x86_64</emulator>
-    <interface type='network'>
-      <source network='default'/>
-      <model type='virtio'/>
-    </interface>
-    <serial type='pty'>
-      <target port='0'/>
-    </serial>
-    <console type='pty'>
-      <target type='serial' port='0'/>
-    </console>
-    <input type='mouse' bus='ps2'/>
-    <graphics type='vnc' port='-1' autoport='yes'/>
-    <video>
-      <model type='cirrus' vram='9216' heads='1'/>
-    </video>
-    <memballoon model='virtio'/>
-    <rng model='virtio'>
-      <backend model='random'>/dev/random</backend>
-    </rng>
-  </devices>
-</domain>
-EOF
+NAME=$NAME MEMORY=$MEMSIZE_BYTES VCPUS=$VCPUS render "node.xml" >"$WORKDIR/node.xml"
 virsh define "$WORKDIR/node.xml"
+
+echo "attaching cloud-init image to domain..."
+path=$(virsh vol-path --pool="$POOL" --vol "$NAME-config")
+virsh attach-disk --domain "$NAME" --source "$path" --target hdc --persistent --mode readonly --type cdrom || die "failed to attach disk"
 
 for ((i=0; i < $NUMDISKS; i++)) ; do
     echo "attaching disk$i to domain..."
