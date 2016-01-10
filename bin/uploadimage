@@ -154,4 +154,4 @@ echo "creating volume with ($SIZE bytes)"
 virsh vol-create-as --pool "$POOL" --name "$VOLUMENAME" --capacity "$SIZE"
 
 echo "uploading image"
-${COMPRESSORT}_get_contents "$IMAGEFILE" | virsh vol-upload --vol "$VOLUMENAME" --file /dev/stdin --pool "$POOL"
+${COMPRESSOR}_get_contents "$IMAGEFILE" | virsh vol-upload --vol "$VOLUMENAME" --file /dev/stdin --pool "$POOL"
