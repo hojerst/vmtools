@@ -113,23 +113,72 @@ callhook() {
     env NAME="$NAME" CONFDIR="$CONFDIR" "$hook" "$@"
 }
 
+
+to_bytes() {
+    readonly input="$1"
+    local size
+    case "$input" in
+        *m)
+            size="${input%*m}"
+            echo "$((size*1000*1000))"
+        ;;
+        *g)
+            size="${input%*g}"
+            echo "$((size*1000*1000*1000))"
+        ;;
+        *k)
+            size="${input%*k}"
+            echo "$((size*1000))"
+        ;;
+        *M)
+            size="${input%*M}"
+            echo "$((size*1024*1024))"
+        ;;
+        *G)
+            size="${input%*G}"
+            echo "$((size*1024*1024*1024))"
+        ;;
+        *K)
+            size="${input%*K}"
+            echo "$((size*1024))"
+        ;;
+        *)
+            die "unknown unit in input: '$input'"
+        ;;
+    esac
+}
+
 ##############################################################################
 # configuration
 ##############################################################################
 readonly CONFDIR="$HOME/.vmtools"
 readonly IMAGEDIR="$CONFDIR/images"
 
-[ -r "$CONFDIR/config" ] || die "no configuration file found"
-source "$CONFDIR/config"
+# defaults
+POOL=default
+MEMSIZE=512M
+DISKSIZE=2G
+VCPUS=1
 
+# read config file (if it exists)
+if [ -r "$CONFDIR/config" ] ; then
+    source "$CONFDIR/config"
+fi
+
+# parse arguments
 parseargs "$@"
+
+# calculate sizes in bytes
+MEMSIZE_BYTES="$(to_bytes "$MEMSIZE")"
+DISKSIZE_BYTES="$(to_bytes "$DISKSIZE")"
 
 ##############################################################################
 # sanity checks
 ##############################################################################
-[ $DISKSIZE -ge "2" ] || die "disk size must be at least 2 gb"
-[ $MEMSIZE -ge "512" ] || die "memory size must be at least 512 mb"
+[ $DISKSIZE_BYTES -ge 2147483648 ] || die "disk size must be at least 2 gb"
+[ $MEMSIZE_BYTES -ge 536870912 ] || die "memory size must be at least 512 mb"
 [ $VCPUS -ge 1 ] || die "need at least one cpu"
+[ -z "$IMAGE" ] && die "no --image provided"
 [ -d $IMAGEDIR/$IMAGE ] || die "image $IMAGE not found"
 [ ! -e "/dev/$POOL/$NAME" ] || die "disk for vm $NAME already exists"
 virsh dominfo "$NAME" >/dev/null 2>&1 && die "vm $NAME already exists"
@@ -144,8 +193,8 @@ trap "rm -rf -- '$WORKDIR'" EXIT
 # summary
 ##############################################################################
 echo "creating vm $NAME:"
-echo "  memory: $MEMSIZE mb"
-echo "  disk:   $DISKSIZE gb"
+echo "  memory: $MEMSIZE ($MEMSIZE_BYTES bytes)"
+echo "  disk:   $DISKSIZE ($DISKSIZE_BYTES bytes)"
 echo "  cpus:   $VCPUS"
 echo "  image:  $IMAGE"
 echo
@@ -162,7 +211,7 @@ fi
 cd "$IMAGEDIR/$IMAGE"
 
 echo "creating disk"
-virsh vol-create-as --pool "$POOL" --name "$NAME" --capacity "$DISKSIZE"G || die "can't create volume"
+virsh vol-create-as --pool "$POOL" --name "$NAME" --capacity "$DISKSIZE_BYTES" || die "can't create volume"
 DISKPATH=$(virsh vol-path --pool "$POOL" "$NAME")
 
 echo "installing disk image"
@@ -173,7 +222,7 @@ else
 fi
 
 echo "creating vm"
-render "node.xml" NAME="$NAME" MEMORY="$MEMSIZE" VCPUS="$VCPUS" DISKPATH="$DISKPATH" >$WORKDIR/node.xml
+render "node.xml" NAME="$NAME" MEMORY="$MEMSIZE_BYTES" VCPUS="$VCPUS" DISKPATH="$DISKPATH" >$WORKDIR/node.xml
 virsh define "$WORKDIR/node.xml"
 
 echo "starting vm"
