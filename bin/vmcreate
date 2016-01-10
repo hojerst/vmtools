@@ -71,7 +71,7 @@ parseargs() {
                 MEMSIZE="${1##*=}"
                 ;;
             --vcpus=*)
-                CPUS="${1##*=}"
+                VCPUS="${1##*=}"
                 ;;
             --image=*)
                 IMAGE="${1##*=}"
