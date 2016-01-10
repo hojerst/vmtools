@@ -281,12 +281,7 @@ trap "rm -rf -- '$WORKDIR'" EXIT
 
 echo "creating cloud-init image..."
 mkdir "$WORKDIR/config-drive"
-
-cat >"$WORKDIR/config-drive/meta-data" <<EOF
-instance-id: iid-local01
-local-hostname: $NAME
-EOF
-
+NAME=$NAME render "meta-data" >"$WORKDIR/config-drive/meta-data"
 NAME=$NAME render "user-data" >"$WORKDIR/config-drive/user-data"
 
 create_iso "$WORKDIR/config.iso" "$WORKDIR/config-drive"
