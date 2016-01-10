@@ -19,7 +19,7 @@ SYNOPSIS
     uploadimage [options] file volumename
 
 OPTIONS
-    --pool=<name>      pool name to store the volume (default: default)
+    --pool=<name>      pool name to store the volume
 EOF
     exit 1
 }
@@ -129,7 +129,15 @@ none_get_contents() {
 # defaults
 ###########################################################################
 
-POOL="default"
+readonly CONFDIR="$HOME/.vmtools"
+
+# defaults
+POOL=default
+
+# read config file (if it exists)
+if [ -r "$CONFDIR/config" ] ; then
+    source "$CONFDIR/config"
+fi
 
 ###########################################################################
 # parse arguments
