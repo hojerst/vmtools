@@ -201,9 +201,9 @@ create_iso() {
     local src="$2"
 
     if which hdiutil >/dev/null 2>&1 ; then
-        hdiutil makehybrid -o "$iso" "$src" -iso -joliet
+        hdiutil makehybrid -volname cidata -o "$iso" "$src" -iso -joliet
     elif which mkisofs >/dev/null 2>&1 ; then
-        mkisofs -J -o "$iso" "$src"
+        mkisofs -V cidata -J -o "$iso" "$src"
     else
         die "no iso disk creator found (tried hdiutil and mkisofs)"
     fi
@@ -273,7 +273,7 @@ fi
 # work dir
 ##############################################################################
 WORKDIR=$(mktemp -d /tmp/vmcreateXXXXXX)
-#trap "rm -rf -- '$WORKDIR'" EXIT
+trap "rm -rf -- '$WORKDIR'" EXIT
 
 ##############################################################################
 # main
@@ -281,7 +281,14 @@ WORKDIR=$(mktemp -d /tmp/vmcreateXXXXXX)
 
 echo "creating cloud-init image..."
 mkdir "$WORKDIR/config-drive"
+
+cat >"$WORKDIR/config-drive/meta-data" <<EOF
+instance-id: iid-local01
+local-hostname: $NAME
+EOF
+
 NAME=$NAME render "user-data" >"$WORKDIR/config-drive/user-data"
+
 create_iso "$WORKDIR/config.iso" "$WORKDIR/config-drive"
 
 echo "creating cloud-init volume..."
