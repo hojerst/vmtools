@@ -167,7 +167,7 @@ check_disks() {
 
     NUMDISKS=${#DISK[*]}
     for disk in "${DISK[@]}" ; do
-        vol-info --pool "$IMAGEPOOL" "$disk" >/dev/null 2>&1 || die "disk image $disk doesn't exist"
+        virsh vol-info --pool "$IMAGEPOOL" "$disk" >/dev/null 2>&1 || die "disk image $disk doesn't exist"
         minsize=$(virsh vol-dumpxml --pool "$IMAGEPOOL" "$disk" | sed -e '/ *<capacity /!d' -e "s# *<capacity unit='bytes'>##" -e 's#</capacity>.*##')
 
         if [ -z "${DISKSIZE[$i]}" ] ; then
@@ -190,7 +190,7 @@ create_iso() {
     local src="$2"
 
     if which hdiutil >/dev/null 2>&1 ; then
-        hdiutil makehybrid -volname cidata -o "$iso" "$src" -iso -joliet
+        hdiutil makehybrid -default-volume-name cidata -o "$iso" "$src" -iso -joliet
     elif which mkisofs >/dev/null 2>&1 ; then
         mkisofs -V cidata -J -o "$iso" "$src"
     else
@@ -283,12 +283,7 @@ echo "uploading cloud-init image..."
 virsh vol-upload --pool "$POOL" --vol "$NAME-config" --file "$WORKDIR/config.iso" || die "failed to upload image"
 
 for ((i=0; i < $NUMDISKS; i++)) ; do
-    echo "creating disk$i (${DISK})..."
-    virsh vol-create-as --pool "$POOL" --name "$NAME-disk$i" --capacity "$DISKSIZE_BYTES" || die "can't create disk volume"
-done
-
-for ((i=0; i < $NUMDISKS; i++)) ; do
-    echo "copying image ${DISK[$i]} to disk$i..."
+    echo "creating disk$i from image ${DISK[$i]}..."
     cat >"$WORKDIR/disk$i.xml" <<EOF
 <volume type='block'>
   <name>$NAME-disk$i</name>
