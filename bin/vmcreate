@@ -19,10 +19,10 @@ SYNOPSIS
     vmcreate [options] name
 
 OPTIONS
-    --disksize=<size>   disk size in GB
-    --memsize=<size>    memory size in MB
-    --vcpus=<count>     number of virtual cpus
-    --image=<name>      name of image to use
+    --disk<x>-size=<size>  size of disk <x>
+    --memory=<size>        memory size of domain
+    --vcpus=<count>        number of virtual cpus
+    --image=<name>         name of image to use
 EOF
     exit 1
 }
@@ -58,16 +58,20 @@ parsepositional() {
 # parse arguments
 parseargs() {
     local pos="x"
+    local i
+    local tmp
 
     while [ $# -ge 1 ] ; do
         case "$1" in
             --help)
                 usage
                 ;;
-            --disksize=*)
-                DISKSIZE="${1##*=}"
+            --disk?-size=*)
+                tmp="${1#--disk*}"
+                i="${tmp%-size=*}"
+                DISKSIZE[$i]="${1##*=}"
                 ;;
-            --memsize=*)
+            --memory=*)
                 MEMSIZE="${1##*=}"
                 ;;
             --vcpus=*)
@@ -118,6 +122,10 @@ to_bytes() {
     readonly input="$1"
     local size
     case "$input" in
+        *b)
+            size="${input%*b}"
+            echo "$size"
+        ;;
         *m)
             size="${input%*m}"
             echo "$((size*1000*1000))"
@@ -148,6 +156,45 @@ to_bytes() {
     esac
 }
 
+get_size() {
+    gzip -l "$1" | sed -e '1d' -e '2 s/  */ /g' -e "2 s/^ //" | cut -f2 -d" "
+}
+
+get_contents() {
+    gzip -dc "$1"
+}
+
+get_device() {
+    local ALPHA=abcdefghijklmnopqrstuvwxyz
+    echo vd${ALPHA[$1]}
+}
+
+check_disks() {
+    local disk
+    local minsize
+    local i=0
+
+    NUMDISKS=0
+    for disk in disk*.img.gz ; do
+        [ -e "$disk" ] || break
+        [ -r "$disk" ] || die "disk image $disk is not readable"
+
+        minsize="$(get_size "$disk")"
+        if [ -z "${DISKSIZE[$i]}" ] ; then
+            DISKSIZE[$i]="${minsize}b"
+            DISKSIZE_BYTES[$i]="${minsize}"
+        else
+            DISKSIZE_BYTES[$i]="$(to_bytes "${DISKSIZE[$i]}")"
+            if [ "$minsize" -gt "${DISKSIZE_BYTES[$i]}" ] ; then
+                die "disk$i must be at least $minsize bytes"
+            fi
+        fi
+
+        i=$((i+1))
+        NUMDISKS=$i
+    done
+}
+
 ##############################################################################
 # configuration
 ##############################################################################
@@ -157,7 +204,6 @@ readonly IMAGEDIR="$CONFDIR/images"
 # defaults
 POOL=default
 MEMSIZE=512M
-DISKSIZE=2G
 VCPUS=1
 
 # read config file (if it exists)
@@ -170,33 +216,36 @@ parseargs "$@"
 
 # calculate sizes in bytes
 MEMSIZE_BYTES="$(to_bytes "$MEMSIZE")"
-DISKSIZE_BYTES="$(to_bytes "$DISKSIZE")"
 
 ##############################################################################
 # sanity checks
 ##############################################################################
-[ $DISKSIZE_BYTES -ge 2147483648 ] || die "disk size must be at least 2 gb"
-[ $MEMSIZE_BYTES -ge 536870912 ] || die "memory size must be at least 512 mb"
-[ $VCPUS -ge 1 ] || die "need at least one cpu"
 [ -z "$IMAGE" ] && die "no --image provided"
 [ -d $IMAGEDIR/$IMAGE ] || die "image $IMAGE not found"
-[ ! -e "/dev/$POOL/$NAME" ] || die "disk for vm $NAME already exists"
+
+[ $MEMSIZE_BYTES -ge 536870912 ] || die "memory size must be at least 512 mb"
+[ $VCPUS -ge 1 ] || die "need at least one cpu"
+
 virsh dominfo "$NAME" >/dev/null 2>&1 && die "vm $NAME already exists"
 
-##############################################################################
-# work dir
-##############################################################################
-WORKDIR=$(mktemp -d /tmp/vmcreateXXXXXX)
-trap "rm -rf -- '$WORKDIR'" EXIT
+cd "$IMAGEDIR/$IMAGE"
+check_disks
+
+for ((i=0; i < $NUMDISKS; i++)) ; do
+    virsh vol-info --pool="$POOL" "$NAME-disk$i" >/dev/null 2<&1 && die "disk$i for vm $NAME already exists"
+done
 
 ##############################################################################
 # summary
 ##############################################################################
 echo "creating vm $NAME:"
 echo "  memory: $MEMSIZE ($MEMSIZE_BYTES bytes)"
-echo "  disk:   $DISKSIZE ($DISKSIZE_BYTES bytes)"
 echo "  cpus:   $VCPUS"
 echo "  image:  $IMAGE"
+for ((i=0; i < $NUMDISKS; i++)) ; do
+    echo "  disk$i:  ${DISKSIZE[$i]} (${DISKSIZE_BYTES[$i]} bytes)"
+done
+
 echo
 echo "continue [Y/n]? "
 read answer
@@ -205,26 +254,78 @@ if [ "$answer" != "y" ] && [ "$answer" != "Y" ] && [ "$answer" != "" ] ; then
 fi
 
 ##############################################################################
+# work dir
+##############################################################################
+WORKDIR=$(mktemp -d /tmp/vmcreateXXXXXX)
+trap "rm -rf -- '$WORKDIR'" EXIT
+
+##############################################################################
 # main
 ##############################################################################
 
-cd "$IMAGEDIR/$IMAGE"
+for ((i=0; i < $NUMDISKS; i++)) ; do
+    echo "creating disk$i..."
+    virsh vol-create-as --pool "$POOL" --name "$NAME-disk$i" --capacity "$DISKSIZE_BYTES" || die "can't create disk volume"
+done
 
-echo "creating disk"
-virsh vol-create-as --pool "$POOL" --name "$NAME" --capacity "$DISKSIZE_BYTES" || die "can't create volume"
-DISKPATH=$(virsh vol-path --pool "$POOL" "$NAME")
+for ((i=0; i < $NUMDISKS; i++)) ; do
+    echo "loading image for disk$i..."
+    get_contents disk$i.img.gz | virsh vol-upload --pool "$POOL" --vol "$NAME-disk$i" --file /dev/stdin || die "failed to upload image"
+done
 
-echo "installing disk image"
-if [ -x ./install-disk.sh ] ; then
-    callhook ./install-disk.sh disk1.img "$DISKPATH"
-else
-    qemu-img convert disk1.img "$DISKPATH" -O raw
-fi
-
-echo "creating vm"
-render "node.xml" NAME="$NAME" MEMORY="$MEMSIZE_BYTES" VCPUS="$VCPUS" DISKPATH="$DISKPATH" >$WORKDIR/node.xml
+echo "creating domain..."
+cat >"$WORKDIR/node.xml" <<EOF
+<domain type='kvm'>
+  <name>$NAME</name>
+  <memory unit="b">$MEMSIZE_BYTES</memory>
+  <vcpu>$VCPUS</vcpu>
+  <os>
+    <type arch='x86_64' machine='pc-1.0'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+    <pae/>
+  </features>
+  <cpu mode='host-passthrough'/>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>restart</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <interface type='network'>
+      <source network='default'/>
+      <model type='virtio'/>
+    </interface>
+    <serial type='pty'>
+      <target port='0'/>
+    </serial>
+    <console type='pty'>
+      <target type='serial' port='0'/>
+    </console>
+    <input type='mouse' bus='ps2'/>
+    <graphics type='vnc' port='-1' autoport='yes'/>
+    <video>
+      <model type='cirrus' vram='9216' heads='1'/>
+    </video>
+    <memballoon model='virtio'/>
+    <rng model='virtio'>
+      <backend model='random'>/dev/random</backend>
+    </rng>
+  </devices>
+</domain>
+EOF
 virsh define "$WORKDIR/node.xml"
 
-echo "starting vm"
+for ((i=0; i < $NUMDISKS; i++)) ; do
+    echo "attaching disk$i to domain..."
+    diskname="$NAME-disk$i"
+    path=$(virsh vol-path --pool="$POOL" --vol "$diskname")
+    virsh attach-disk --domain "$NAME" --source "$path" --target $(get_device $i) --persistent || die "failed to attach disk"
+done
+
+echo "starting domain..."
 virsh start "$NAME"
 virsh autostart "$NAME"
