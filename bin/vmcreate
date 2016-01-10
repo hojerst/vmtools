@@ -151,18 +151,7 @@ to_bytes() {
 get_size() {
     local file="$1"
 
-    case "$file" in
-        *.gz)
-            gzip -l "$file" | sed -e '1d' -e '2 s/  */ /g' -e "2 s/^ //" | cut -f2 -d" "
-            ;;
-        *)
-            wc -c "$file" | sed -e 's/  */ /g' -e "s/^ //" | cut -f1 -d" "
-            ;;
-    esac
-}
-
-get_contents() {
-    gzip -dc "$1"
+    wc -c "$file" | sed -e 's/  */ /g' -e "s/^ //" | cut -f1 -d" "
 }
 
 get_device() {
@@ -171,16 +160,16 @@ get_device() {
 }
 
 check_disks() {
+    source disks
+
     local disk
     local minsize
-    local i=0
 
-    NUMDISKS=0
-    for disk in disk*.img.gz ; do
-        [ -e "$disk" ] || break
-        [ -r "$disk" ] || die "disk image $disk is not readable"
+    NUMDISKS=${#DISK[*]}
+    for disk in "${DISK[@]}" ; do
+        vol-info --pool "$IMAGEPOOL" "$disk" >/dev/null 2>&1 || die "disk image $disk doesn't exist"
+        minsize=$(virsh vol-dumpxml --pool "$IMAGEPOOL" "$disk" | sed -e '/ *<capacity /!d' -e "s# *<capacity unit='bytes'>##" -e 's#</capacity>.*##')
 
-        minsize="$(get_size "$disk")"
         if [ -z "${DISKSIZE[$i]}" ] ; then
             DISKSIZE[$i]="${minsize}b"
             DISKSIZE_BYTES[$i]="${minsize}"
@@ -216,6 +205,7 @@ readonly CONFDIR="$HOME/.vmtools"
 readonly IMAGEDIR="$CONFDIR/images"
 
 # defaults
+IMAGEPOOL=images
 POOL=default
 MEMSIZE=512M
 VCPUS=1
@@ -293,13 +283,20 @@ echo "uploading cloud-init image..."
 virsh vol-upload --pool "$POOL" --vol "$NAME-config" --file "$WORKDIR/config.iso" || die "failed to upload image"
 
 for ((i=0; i < $NUMDISKS; i++)) ; do
-    echo "creating disk$i..."
+    echo "creating disk$i (${DISK})..."
     virsh vol-create-as --pool "$POOL" --name "$NAME-disk$i" --capacity "$DISKSIZE_BYTES" || die "can't create disk volume"
 done
 
 for ((i=0; i < $NUMDISKS; i++)) ; do
-    echo "uploading image for disk$i..."
-    get_contents disk$i.img.gz | virsh vol-upload --pool "$POOL" --vol "$NAME-disk$i" --file /dev/stdin || die "failed to upload image"
+    echo "copying image ${DISK[$i]} to disk$i..."
+    cat >"$WORKDIR/disk$i.xml" <<EOF
+<volume type='block'>
+  <name>$NAME-disk$i</name>
+  <capacity unit='b'>${DISKSIZE_BYTES[$i]}</capacity>
+</volume>
+EOF
+
+    virsh vol-create-from --pool "$POOL" --inputpool "$IMAGEPOOL" --vol "${DISK[$i]}" --file "$WORKDIR/disk$i.xml" || die "failed to copy image"
 done
 
 echo "creating domain..."
