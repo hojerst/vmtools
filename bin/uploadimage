@@ -16,10 +16,11 @@ NAME
     uploadimage - upload an image to a volume pool
 
 SYNOPSIS
-    uploadimage [options] file volumename
+    uploadimage [options] file
 
 OPTIONS
     --pool=<name>      pool name to store the volume
+    --volume=<name>    volume name (defaults to file name)
 EOF
     exit 1
 }
@@ -32,9 +33,6 @@ parsepositional() {
     case "$pos" in
         x)
             IMAGEFILE="$arg"
-            ;;
-        xx)
-            VOLUMENAME="$arg"
             ;;
         *)
             echo 1>&2 "unknown argument: '$arg'"
@@ -54,6 +52,9 @@ parseargs() {
                 ;;
             --pool=*)
                 POOL="${1##*=}"
+                ;;
+            --volume=*)
+                VOLUMENAME="${1##*=}"
                 ;;
             --)
                 shift
@@ -78,7 +79,7 @@ parseargs() {
     done
 
     # check if all positional arguments where provided
-    if [ "$pos" != "xxx" ] ; then
+    if [ "$pos" != "xx" ] ; then
         echo 1>&2 "missing/insufficient arguments."
         echo
         usage
@@ -93,8 +94,11 @@ get_compressor() {
         *.bz2)
             echo bz2
             ;;
+        *.img)
+            echo qemu
+            ;;
         *)
-            echo none
+            echo raw
             ;;
     esac
 }
@@ -109,7 +113,11 @@ bz2_get_size() {
     bz2_get_contents "$1" | wc -c
 }
 
-none_get_size() {
+qemu_get_size() {
+    qemu-img info "$1" | sed -e '/^virtual size:/!d' -e 's/^.*(//' -e 's/ bytes.*//'
+}
+
+raw_get_size() {
     wc -c "$1" | cut -f1 -d' '
 }
 
@@ -121,7 +129,11 @@ bz2_get_contents() {
     bzip2 -dc "$1"
 }
 
-none_get_contents() {
+raw_get_contents() {
+    cat "$1"
+}
+
+qemu_get_contents() {
     cat "$1"
 }
 
@@ -132,7 +144,7 @@ none_get_contents() {
 readonly CONFDIR="$HOME/.vmtools"
 
 # defaults
-POOL=default
+IMAGEPOOL=images
 
 # read config file (if it exists)
 if [ -r "$CONFDIR/config" ] ; then
@@ -144,6 +156,10 @@ fi
 ###########################################################################
 
 parseargs "$@"
+
+if [ -z "$VOLUMENAME" ] ; then
+    VOLUMENAME=$(basename "$IMAGEFILE")
+fi
 
 ###########################################################################
 # sanity checks
@@ -159,7 +175,7 @@ readonly COMPRESSOR=$(get_compressor "$IMAGEFILE")
 readonly SIZE=$(${COMPRESSOR}_get_size $IMAGEFILE)
 
 echo "creating volume with ($SIZE bytes)"
-virsh vol-create-as --pool "$POOL" --name "$VOLUMENAME" --capacity "$SIZE"
+virsh vol-create-as --pool "$IMAGEPOOL" --name "$VOLUMENAME" --capacity "$SIZE" --format qcow2
 
 echo "uploading image"
-${COMPRESSOR}_get_contents "$IMAGEFILE" | virsh vol-upload --vol "$VOLUMENAME" --file /dev/stdin --pool "$POOL"
+${COMPRESSOR}_get_contents "$IMAGEFILE" | virsh vol-upload --vol "$VOLUMENAME" --file /dev/stdin --pool "$IMAGEPOOL"
