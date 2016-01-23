@@ -100,7 +100,7 @@ parseargs() {
 # configuration
 ##############################################################################
 
-readonly CONFDIR="~/.vmtools"
+readonly CONFDIR="$HOME/.vmtools"
 
 # defaults
 FORCE=n
