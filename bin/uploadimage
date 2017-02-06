@@ -19,7 +19,6 @@ SYNOPSIS
     uploadimage [options] file
 
 OPTIONS
-    --pool=<name>      pool name to store the volume
     --volume=<name>    volume name (defaults to file name)
 EOF
     exit 1
@@ -49,9 +48,6 @@ parseargs() {
         case "$1" in
             --help)
                 usage
-                ;;
-            --pool=*)
-                POOL="${1##*=}"
                 ;;
             --volume=*)
                 VOLUMENAME="${1##*=}"

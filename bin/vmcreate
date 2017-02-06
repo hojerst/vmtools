@@ -23,6 +23,7 @@ OPTIONS
     --memory=<size>        memory size of domain
     --vcpus=<count>        number of virtual cpus
     --image=<name>         name of image to use
+    --(no-)attach          attach to console after startup
 EOF
     exit 1
 }
@@ -79,6 +80,12 @@ parseargs() {
                 ;;
             --image=*)
                 IMAGE="${1##*=}"
+                ;;
+            --attach)
+                ATTACH=y
+                ;;
+            --no-attach)
+                ATTACH=n
                 ;;
             --)
                 shift
@@ -209,6 +216,7 @@ IMAGEPOOL=images
 POOL=default
 MEMSIZE=512M
 VCPUS=1
+ATTACH=n
 
 # read config file (if it exists)
 if [ -r "$CONFDIR/config" ] ; then
@@ -312,3 +320,8 @@ done
 echo "starting domain..."
 virsh start "$NAME"
 virsh autostart "$NAME"
+
+if [ "$ATTACH" = y ] ; then
+    echo "attaching to console..."
+    virsh console "$NAME"
+fi

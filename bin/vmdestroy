@@ -144,8 +144,12 @@ fi
 # main
 ##############################################################################
 
-echo "destroying vm..."
-virsh destroy "$NAME"
+case "$(virsh domstate "$NAME")"
+    in paused|running)
+        echo "destroying vm..."
+        virsh destroy "$NAME"
+        ;;
+esac
 
 if [ "$REMOVESTORAGE" = "y" ] ; then
     echo "removing vm and storage"
