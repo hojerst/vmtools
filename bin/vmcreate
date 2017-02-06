@@ -197,11 +197,19 @@ create_iso() {
     local src="$2"
 
     if which hdiutil >/dev/null 2>&1 ; then
-        hdiutil makehybrid -default-volume-name cidata -o "$iso" "$src" -iso -joliet
+        hdiutil makehybrid -default-volume-name config-2 -o "$iso" "$src" -iso -joliet
     elif which mkisofs >/dev/null 2>&1 ; then
-        mkisofs -V cidata -J -o "$iso" "$src"
+        mkisofs -V config-2 -J -o "$iso" "$src"
     else
         die "no iso disk creator found (tried hdiutil and mkisofs)"
+    fi
+}
+
+yaml2json() {
+    if which python >/dev/null 2>&1 ; then
+        python -c 'import sys, yaml, json; json.dump(yaml.load(sys.stdin), sys.stdout, indent=4)'
+    elif which ruby >/dev/null 2>&1 ; then
+        ruby -ryaml -rjson -e 'puts JSON.pretty_generate(YAML.load(ARGF))'
     fi
 }
 
@@ -278,9 +286,9 @@ trap "rm -rf -- '$WORKDIR'" EXIT
 ##############################################################################
 
 echo "creating cloud-init image..."
-mkdir "$WORKDIR/config-drive"
-NAME=$NAME render "meta-data" >"$WORKDIR/config-drive/meta-data"
-NAME=$NAME render "user-data" >"$WORKDIR/config-drive/user-data"
+mkdir -p "$WORKDIR/config-drive/openstack/latest"
+NAME=$NAME render "meta-data" | yaml2json >"$WORKDIR/config-drive/openstack/latest/meta_data.json"
+NAME=$NAME render "user-data" >"$WORKDIR/config-drive/openstack/latest/user_data"
 
 create_iso "$WORKDIR/config.iso" "$WORKDIR/config-drive"
 
