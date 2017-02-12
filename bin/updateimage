@@ -140,7 +140,7 @@ readonly NUMDISKS=${#DISK[*]}
 
 for ((i=0; i<NUMDISKS; i++)) ; do
     echo "downloading disk$i from ${DISK[i]}..."
-    curl "${DISK[i]}" -o "$WORKDIR/image"
+    curl "${DISK[i]}" -Lo "$WORKDIR/image"
 
     echo "unpacking image (if compressed)..."
     unpack "$WORKDIR/image"
