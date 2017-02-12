@@ -167,15 +167,15 @@ get_device() {
 }
 
 check_disks() {
-    source disks
+    source ./info
 
-    local disk
+    local i
     local minsize
 
     NUMDISKS=${#DISK[*]}
-    for disk in "${DISK[@]}" ; do
-        virsh vol-info --pool "$IMAGEPOOL" "$disk" >/dev/null 2>&1 || die "disk image $disk doesn't exist"
-        minsize=$(virsh vol-dumpxml --pool "$IMAGEPOOL" "$disk" | sed -e '/ *<capacity /!d' -e "s# *<capacity unit='bytes'>##" -e 's#</capacity>.*##')
+    for ((i=0; i<NUMDISKS; i++)) ; do
+        virsh vol-info --pool "$IMAGEPOOL" "$IMAGE-disk$i" >/dev/null 2>&1 || die "missing image for disk$i"
+        minsize=$(virsh vol-dumpxml --pool "$IMAGEPOOL" "$IMAGE-disk$i" | sed -e '/ *<capacity /!d' -e "s# *<capacity unit='bytes'>##" -e 's#</capacity>.*##')
 
         if [ -z "${DISKSIZE[$i]}" ] ; then
             DISKSIZE[$i]="${minsize}b"
@@ -197,19 +197,11 @@ create_iso() {
     local src="$2"
 
     if which hdiutil >/dev/null 2>&1 ; then
-        hdiutil makehybrid -default-volume-name config-2 -o "$iso" "$src" -iso -joliet
+        hdiutil makehybrid -default-volume-name "$CONFIGDRIVE_LABEL" -o "$iso" "$src" -iso -joliet
     elif which mkisofs >/dev/null 2>&1 ; then
-        mkisofs -V config-2 -J -o "$iso" "$src"
+        mkisofs -V "$CONFIGDRIVE_LABEL" -J -o "$iso" "$src"
     else
         die "no iso disk creator found (tried hdiutil and mkisofs)"
-    fi
-}
-
-yaml2json() {
-    if which python >/dev/null 2>&1 ; then
-        python -c 'import sys, yaml, json; json.dump(yaml.load(sys.stdin), sys.stdout, indent=4)'
-    elif which ruby >/dev/null 2>&1 ; then
-        ruby -ryaml -rjson -e 'puts JSON.pretty_generate(YAML.load(ARGF))'
     fi
 }
 
@@ -225,6 +217,7 @@ POOL=default
 MEMSIZE=512M
 VCPUS=1
 ATTACH=n
+CONFIGDRIVE_LABEL=cidata
 
 # read config file (if it exists)
 if [ -r "$CONFDIR/config" ] ; then
@@ -255,7 +248,7 @@ for ((i=0; i < $NUMDISKS; i++)) ; do
     virsh vol-info --pool="$POOL" "$NAME-disk$i" >/dev/null 2<&1 && die "disk$i for vm $NAME already exists"
 done
 
-virsh vol-info --pool="$POOL" "$NAME-config" >/dev/null 2<&1 && die "config for vm $NAME already exists"
+virsh vol-info --pool="$POOL" "$NAME-config" >/dev/null 2<&1 && die "config-drive for vm $NAME already exists"
 
 ##############################################################################
 # summary
@@ -263,7 +256,7 @@ virsh vol-info --pool="$POOL" "$NAME-config" >/dev/null 2<&1 && die "config for 
 echo "creating vm $NAME:"
 echo "  memory: $MEMSIZE ($MEMSIZE_BYTES bytes)"
 echo "  cpus:   $VCPUS"
-echo "  image:  $IMAGE"
+echo "  image:  $IMAGE ($DESCRIPTION)"
 for ((i=0; i < $NUMDISKS; i++)) ; do
     echo "  disk$i:  ${DISKSIZE[$i]} (${DISKSIZE_BYTES[$i]} bytes)"
 done
@@ -285,21 +278,27 @@ trap "rm -rf -- '$WORKDIR'" EXIT
 # main
 ##############################################################################
 
-echo "creating cloud-init image..."
-mkdir -p "$WORKDIR/config-drive/openstack/latest"
-NAME=$NAME render "meta-data" | yaml2json >"$WORKDIR/config-drive/openstack/latest/meta_data.json"
-NAME=$NAME render "user-data" >"$WORKDIR/config-drive/openstack/latest/user_data"
+if [ -d config-drive ] ; then
+    echo "creating config-drive image..."
 
-create_iso "$WORKDIR/config.iso" "$WORKDIR/config-drive"
+    mkdir "$WORKDIR/config-drive"
+    cp -a config-drive/ "$WORKDIR/config-drive"
+    find "$WORKDIR/config-drive" -type f | while read file ; do
+        NAME="$NAME" render "$file" >"$WORKDIR/currentfile"
+        mv "$WORKDIR/currentfile" "$file"
+    done
 
-echo "creating cloud-init volume..."
-virsh vol-create-as --pool "$POOL" --name "$NAME-config" --capacity $(get_size "$WORKDIR/config.iso") || die "failed to create volume"
+    create_iso "$WORKDIR/config.iso" "$WORKDIR/config-drive"
 
-echo "uploading cloud-init image..."
-virsh vol-upload --pool "$POOL" --vol "$NAME-config" --file "$WORKDIR/config.iso" || die "failed to upload image"
+    echo "creating config-drive..."
+    virsh vol-create-as --pool "$POOL" --name "$NAME-config" --capacity $(get_size "$WORKDIR/config.iso") || die "failed to create volume"
+
+    echo "uploading config-drive..."
+    virsh vol-upload --pool "$POOL" --vol "$NAME-config" --file "$WORKDIR/config.iso" || die "failed to upload image"
+fi
 
 for ((i=0; i < $NUMDISKS; i++)) ; do
-    echo "creating disk$i from image ${DISK[$i]}..."
+    echo "creating disk$i..."
     cat >"$WORKDIR/disk$i.xml" <<EOF
 <volume type='block'>
   <name>$NAME-disk$i</name>
@@ -307,14 +306,14 @@ for ((i=0; i < $NUMDISKS; i++)) ; do
 </volume>
 EOF
 
-    virsh vol-create-from --pool "$POOL" --inputpool "$IMAGEPOOL" --vol "${DISK[$i]}" --file "$WORKDIR/disk$i.xml" || die "failed to copy image"
+    virsh vol-create-from --pool "$POOL" --inputpool "$IMAGEPOOL" --vol "$IMAGE-disk$i" --file "$WORKDIR/disk$i.xml" || die "failed to copy image"
 done
 
 echo "creating domain..."
 NAME=$NAME MEMORY=$MEMSIZE_BYTES VCPUS=$VCPUS render "node.xml" >"$WORKDIR/node.xml"
 virsh define "$WORKDIR/node.xml"
 
-echo "attaching cloud-init image to domain..."
+echo "attaching config-drive to domain..."
 path=$(virsh vol-path --pool="$POOL" --vol "$NAME-config")
 virsh attach-disk --domain "$NAME" --source "$path" --target hdc --persistent --mode readonly --type cdrom || die "failed to attach disk"
 
