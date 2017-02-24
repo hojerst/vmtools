@@ -261,13 +261,6 @@ for ((i=0; i < $NUMDISKS; i++)) ; do
     echo "  disk$i:  ${DISKSIZE[$i]} (${DISKSIZE_BYTES[$i]} bytes)"
 done
 
-echo
-echo "continue [Y/n]? "
-read answer
-if [ "$answer" != "y" ] && [ "$answer" != "Y" ] && [ "$answer" != "" ] ; then
-    exit 0
-fi
-
 ##############################################################################
 # work dir
 ##############################################################################
