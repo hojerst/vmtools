@@ -24,6 +24,7 @@ OPTIONS
     --vcpus=<count>        number of virtual cpus
     --image=<name>         name of image to use
     --(no-)attach          attach to console after startup
+    --(no-)dry-run         just print summary, do not create anything
 EOF
     exit 1
 }
@@ -86,6 +87,12 @@ parseargs() {
                 ;;
             --no-attach)
                 ATTACH=n
+                ;;
+            --dry-run)
+                DRY_RUN=y
+                ;;
+            --no-dry-run)
+                DRY_RUN=n
                 ;;
             --)
                 shift
@@ -218,6 +225,7 @@ MEMSIZE=512M
 VCPUS=1
 ATTACH=n
 CONFIGDRIVE_LABEL=cidata
+DRY_RUN=n
 
 # read config file (if it exists)
 if [ -r "$CONFDIR/config" ] ; then
@@ -260,6 +268,10 @@ echo "  image:  $IMAGE ($DESCRIPTION)"
 for ((i=0; i < $NUMDISKS; i++)) ; do
     echo "  disk$i:  ${DISKSIZE[$i]} (${DISKSIZE_BYTES[$i]} bytes)"
 done
+
+if [ "$DRY_RUN" = "y" ] ; then
+    exit 0
+fi
 
 ##############################################################################
 # work dir
