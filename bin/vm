@@ -31,7 +31,7 @@ fi
 # common functions
 ##############################################################################
 die() {
-    echo 1>&2 "ERROR:" "$@"
+    echo 1>&2 "$(basename "$0"):" "$@"
     exit 1
 }
 
@@ -102,12 +102,16 @@ get_device() {
 
 # parse command
 if [ $# -lt 1 ] ; then
-    die "usage: $0 subcommand"
+    die "missing subcommand - '$0 help' for a list of valid commands"
 fi
 
 # extract subcommand from arguments
-readonly subcommand="$1"
+subcommand="$1"
 shift
+
+if [ "$subcommand" = "--help" ] ; then
+    subcommand=help
+fi
 
 # check that subcommand is alphanumeric or underscore
 if [[ "$subcommand" =~ [^a-zA-Z0-9_] ]]; then
@@ -119,8 +123,10 @@ if [ ! -r "$SUBCOMMANDDIR/$subcommand.sh" ] ; then
     die "unknown subcommand: $subcommand"
 fi
 
-# load subcommand
-source "$SUBCOMMANDDIR/$subcommand.sh"
+readonly SUBCOMMAND="$subcommand"
+
+# load subcommand definitions
+source "$SUBCOMMANDDIR/$SUBCOMMAND.sh"
 
 # run subcommand
 main "$@"
