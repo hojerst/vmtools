@@ -5,8 +5,27 @@ set -e
 ##############################################################################
 # configuration
 ##############################################################################
+
 readonly CONFDIR="$HOME/.vmtools"
-readonly IMAGEDIR="$CONFDIR/images"
+
+# defaults
+SUBCOMMANDDIR="$(cd $(dirname "${BASH_SOURCE[0]}")/../share/vmtools/subcommands && pwd)"
+IMAGEDIR="$CONFDIR/images"
+IMAGEPOOL=images
+POOL=default
+MEMSIZE=512M
+VCPUS=1
+ATTACH=n
+CONFIGDRIVE_LABEL=cidata
+DRY_RUN=n
+FORCE=n
+REMOVESTORAGE=n
+DOMAIN=
+
+# read config file (if it exists)
+if [ -r "$CONFDIR/config" ] ; then
+    source "$CONFDIR/config"
+fi
 
 ##############################################################################
 # common functions
@@ -77,412 +96,6 @@ get_device() {
     echo vd${ALPHA:$i:1}
 }
 
-
-##############################################################################
-# vm create
-##############################################################################
-subcmd_create_usage() {
-    cat <<EOF
-NAME
-    vm create - create a virtual machine from an image
-
-SYNOPSIS
-    vm create [options] name
-
-OPTIONS
-    --disk<x>-size=<size>  size of disk <x>
-    --memory=<size>        memory size of domain
-    --vcpus=<count>        number of virtual cpus
-    --image=<name>         name of image to use
-    --(no-)attach          attach to console after startup
-    --(no-)dry-run         just print summary, do not create anything
-EOF
-    exit 1
-}
-
-# parse positional parameter
-subcmd_create_parsepositional() {
-    local pos="$1"
-    local arg="$2"
-
-    case "$pos" in
-        x)
-            NAME="$arg"
-            ;;
-        *)
-            echo 1>&2 "unknown argument: '$arg'"
-            exit 1
-            ;;
-    esac
-}
-
-# parse arguments
-subcmd_create_parseargs() {
-    local pos="x"
-    local i
-    local tmp
-
-    while [ $# -ge 1 ] ; do
-        case "$1" in
-            --help)
-                usage
-                ;;
-            --disk?-size=*)
-                tmp="${1#--disk*}"
-                i="${tmp%-size=*}"
-                DISKSIZE[$i]="${1##*=}"
-                ;;
-            --memory=*)
-                MEMSIZE="${1##*=}"
-                ;;
-            --vcpus=*)
-                VCPUS="${1##*=}"
-                ;;
-            --image=*)
-                IMAGE="${1##*=}"
-                ;;
-            --attach)
-                ATTACH=y
-                ;;
-            --no-attach)
-                ATTACH=n
-                ;;
-            --dry-run)
-                DRY_RUN=y
-                ;;
-            --no-dry-run)
-                DRY_RUN=n
-                ;;
-            --)
-                shift
-                break
-                ;;
-            --*)
-                echo 1>&2 "unknown option '$1' - ignored."
-                ;;
-            *)
-                subcmd_create_parsepositional "$pos" "$1"
-                pos="x$pos"
-                ;;
-        esac
-        shift
-    done
-
-    # parse remaining positional arguments
-    while [ $# -ge 1 ] ; do
-        subcmd_create_parsepositional "$pos" "$1"
-        pos="x$pos"
-        shift
-    done
-
-    # check if all positional arguments where provided
-    if [ "$pos" != "xx" ] ; then
-        echo 1>&2 "missing/insufficient arguments."
-        echo
-        subcmd_create_usage
-    fi
-}
-
-subcmd_create_check_disks() {
-    source ./info
-
-    local i
-    local minsize
-
-    NUMDISKS=${#DISK[*]}
-    for ((i=0; i<NUMDISKS; i++)) ; do
-        virsh vol-info --pool "$IMAGEPOOL" "$IMAGE-disk$i" >/dev/null 2>&1 || die "missing image for disk$i"
-        minsize=$(virsh vol-dumpxml --pool "$IMAGEPOOL" "$IMAGE-disk$i" | sed -e '/ *<capacity /!d' -e "s# *<capacity unit='bytes'>##" -e 's#</capacity>.*##')
-
-        if [ -z "${DISKSIZE[$i]}" ] ; then
-            DISKSIZE[$i]="${minsize}b"
-            DISKSIZE_BYTES[$i]="${minsize}"
-        else
-            DISKSIZE_BYTES[$i]="$(to_bytes "${DISKSIZE[$i]}")"
-            if [ "$minsize" -gt "${DISKSIZE_BYTES[$i]}" ] ; then
-                die "disk$i must be at least $minsize bytes"
-            fi
-        fi
-
-        i=$((i+1))
-        NUMDISKS=$i
-    done
-}
-
-subcmd_create_create_iso() {
-    local iso="$1"
-    local src="$2"
-
-    if which hdiutil >/dev/null 2>&1 ; then
-        hdiutil makehybrid -default-volume-name "$CONFIGDRIVE_LABEL" -o "$iso" "$src" -iso -joliet
-    elif which mkisofs >/dev/null 2>&1 ; then
-        mkisofs -V "$CONFIGDRIVE_LABEL" -J -o "$iso" "$src"
-    else
-        die "no iso disk creator found (tried hdiutil and mkisofs)"
-    fi
-}
-
-subcmd_create_main() {
-    # defaults
-    IMAGEPOOL=images
-    POOL=default
-    MEMSIZE=512M
-    VCPUS=1
-    ATTACH=n
-    CONFIGDRIVE_LABEL=cidata
-    DRY_RUN=n
-
-    # read config file (if it exists)
-    if [ -r "$CONFDIR/config" ] ; then
-        source "$CONFDIR/config"
-    fi
-
-    # parse arguments
-    subcmd_create_parseargs "$@"
-
-    # calculate sizes in bytes
-    MEMSIZE_BYTES="$(to_bytes "$MEMSIZE")"
-
-    ### sanity checks
-    [ -z "$IMAGE" ] && die "no --image provided"
-    [ -d $IMAGEDIR/$IMAGE ] || die "image $IMAGE not found"
-
-    [ $MEMSIZE_BYTES -ge 536870912 ] || die "memory size must be at least 512 mb"
-    [ $VCPUS -ge 1 ] || die "need at least one cpu"
-
-    virsh dominfo "$NAME" >/dev/null 2>&1 && die "vm $NAME already exists"
-
-    cd "$IMAGEDIR/$IMAGE"
-    subcmd_create_check_disks
-
-    for ((i=0; i < $NUMDISKS; i++)) ; do
-        virsh vol-info --pool="$POOL" "$NAME-disk$i" >/dev/null 2<&1 && die "disk$i for vm $NAME already exists"
-    done
-
-    virsh vol-info --pool="$POOL" "$NAME-config" >/dev/null 2<&1 && die "config-drive for vm $NAME already exists"
-
-    ### summary
-    echo "creating vm $NAME:"
-    echo "  memory: $MEMSIZE ($MEMSIZE_BYTES bytes)"
-    echo "  cpus:   $VCPUS"
-    echo "  image:  $IMAGE ($DESCRIPTION)"
-    for ((i=0; i < $NUMDISKS; i++)) ; do
-        echo "  disk$i:  ${DISKSIZE[$i]} (${DISKSIZE_BYTES[$i]} bytes)"
-    done
-
-    if [ "$DRY_RUN" = "y" ] ; then
-        exit 0
-    fi
-
-    ### work dir
-    WORKDIR=$(mktemp -d /tmp/vmcreateXXXXXX)
-    trap "rm -rf -- '$WORKDIR'" EXIT
-
-    ### main
-    if [ -d config-drive ] ; then
-        echo "creating config-drive image..."
-
-        mkdir "$WORKDIR/config-drive"
-        cp -a config-drive/* "$WORKDIR/config-drive"
-        find "$WORKDIR/config-drive" -type f | while read file ; do
-            NAME="$NAME" render "$file" >"$WORKDIR/currentfile"
-            mv "$WORKDIR/currentfile" "$file"
-        done
-
-        subcmd_create_create_iso "$WORKDIR/config.iso" "$WORKDIR/config-drive"
-
-        echo "creating config-drive..."
-        virsh vol-create-as --pool "$POOL" --name "$NAME-config" --capacity $(get_size "$WORKDIR/config.iso") || die "failed to create volume"
-
-        echo "uploading config-drive..."
-        virsh vol-upload --pool "$POOL" --vol "$NAME-config" --file "$WORKDIR/config.iso" || die "failed to upload image"
-    fi
-
-    for ((i=0; i < $NUMDISKS; i++)) ; do
-        echo "creating disk$i..."
-        cat >"$WORKDIR/disk$i.xml" <<EOF
-<volume type='block'>
-  <name>$NAME-disk$i</name>
-  <capacity unit='b'>${DISKSIZE_BYTES[$i]}</capacity>
-</volume>
-EOF
-
-        virsh vol-create-from --pool "$POOL" --inputpool "$IMAGEPOOL" --vol "$IMAGE-disk$i" --file "$WORKDIR/disk$i.xml" || die "failed to copy image"
-    done
-
-    echo "creating domain..."
-    NAME=$NAME MEMORY=$MEMSIZE_BYTES VCPUS=$VCPUS render "node.xml" >"$WORKDIR/node.xml"
-    virsh define "$WORKDIR/node.xml"
-
-    echo "attaching config-drive to domain..."
-    path=$(virsh vol-path --pool="$POOL" --vol "$NAME-config")
-    virsh attach-disk --domain "$NAME" --source "$path" --target hdc --persistent --mode readonly --type cdrom || die "failed to attach disk"
-
-    for ((i=0; i < $NUMDISKS; i++)) ; do
-        echo "attaching disk$i to domain..."
-        diskname="$NAME-disk$i"
-        path=$(virsh vol-path --pool="$POOL" --vol "$diskname")
-        virsh attach-disk --domain "$NAME" --source "$path" --target $(get_device $i) --persistent || die "failed to attach disk"
-    done
-
-    echo "starting domain..."
-    virsh start "$NAME"
-    virsh autostart "$NAME"
-
-    if [ "$ATTACH" = y ] ; then
-        echo "attaching to console..."
-        virsh console "$NAME"
-    fi
-}
-
-##############################################################################
-# vm destroy
-##############################################################################
-
-
-subcmd_destroy_usage() {
-    cat <<EOF
-NAME
-    vmdestroy - destroy a virtual machine
-
-SYNOPSIS
-    vmdestroy [options] name
-
-OPTIONS
-    --domain=<x>           dns domain of the vm
-    --(no-)remove-storage  remove storage
-    --(no-)force           do not ask
-EOF
-    exit 1
-}
-
-
-# parse positional parameter
-subcmd_destroy_parsepositional() {
-    local pos="$1"
-    local arg="$2"
-
-    case "$pos" in
-        x)
-            NAME="$arg"
-            ;;
-        *)
-            echo 1>&2 "unknown argument: '$arg'"
-            exit 1
-            ;;
-    esac
-}
-
-# parse arguments
-subcmd_destroy_parseargs() {
-    local pos="x"
-    local i
-    local tmp
-
-    while [ $# -ge 1 ] ; do
-        case "$1" in
-            --help)
-                usage
-                ;;
-            --force)
-                FORCE=y
-                ;;
-            --no-force)
-                FORCE=n
-                ;;
-            --remove-storage)
-                REMOVESTORAGE=y
-                ;;
-            --no-remove-storage)
-                REMOVESTORAGE=n
-                ;;
-            --)
-                shift
-                break
-                ;;
-            --*)
-                echo 1>&2 "unknown option '$1' - ignored."
-                ;;
-            *)
-                subcmd_destroy_parsepositional "$pos" "$1"
-                pos="x$pos"
-                ;;
-        esac
-        shift
-    done
-
-    # parse remaining positional arguments
-    while [ $# -ge 1 ] ; do
-        subcmd_destroy_parsepositional "$pos" "$1"
-        pos="x$pos"
-        shift
-    done
-
-    # check if all positional arguments where provided
-    if [ "$pos" != "xx" ] ; then
-        echo 1>&2 "missing/insufficient arguments."
-        echo
-        usage
-    fi
-}
-
-subcmd_destroy_main() {
-    # defaults
-    FORCE=n
-    REMOVESTORAGE=n
-    DOMAIN=
-
-    # read config file (if it exists)
-    if [ -r "$CONFDIR/config" ] ; then
-        source "$CONFDIR/config"
-    fi
-
-    # parse arguments
-    subcmd_destroy_parseargs "$@"
-
-    ### sanity checks
-    if ! virsh dominfo "$NAME" >/dev/null 2>&1 ; then
-        echo "vm does not exist - nothing to do"
-        exit 0
-    fi
-
-    ### summary
-    if [ "$FORCE" != "y" ] ; then
-        if [ "$REMOVESTORAGE" = "y" ] ; then
-            echo "remove vm $NAME and all of its data"
-        else
-            echo "remove vm $NAME (disks are kept)"
-        fi
-        echo
-        echo "continue [y/N]? "
-        read answer
-        if [ "$answer" != "y" ] && [ "$answer" != "Y" ] ; then
-            exit 0
-        fi
-    fi
-
-    ### main
-    case "$(virsh domstate "$NAME")"
-        in paused|running)
-            echo "destroying vm..."
-            virsh destroy "$NAME"
-            ;;
-    esac
-
-    if [ "$REMOVESTORAGE" = "y" ] ; then
-        echo "removing vm and storage"
-        virsh undefine --remove-all-storage "$NAME"
-    else
-        echo "removing vm"
-        virsh undefine "$NAME"
-    fi
-
-    if [ ! -z "$DOMAIN" ] ; then
-        echo "removing key from known hosts"
-        ssh-keygen -R "$NAME.$DOMAIN"
-    fi
-}
-
 ##############################################################################
 # main: subcommand selection
 ##############################################################################
@@ -495,11 +108,14 @@ fi
 readonly subcommand="$1"
 shift
 
-case "$subcommand" in
-    create|destroy)
-        subcmd_${subcommand}_main "$@"
-    ;;
-    *)
-        die "unknown subcommand $subcommand"
-    ;;
-esac
+if [[ "$subcommand" =~ [^a-zA-Z0-9_] ]]; then
+    die "invalid subcommand: $subcommand"
+fi
+
+if [ ! -r "$SUBCOMMANDDIR/$subcommand.sh" ] ; then
+    die "unknown subcommand: $subcommand"
+fi
+
+source "$SUBCOMMANDDIR/$subcommand.sh"
+
+main "$@"
