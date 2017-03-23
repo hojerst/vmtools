@@ -105,17 +105,22 @@ if [ $# -lt 1 ] ; then
     die "usage: $0 subcommand"
 fi
 
+# extract subcommand from arguments
 readonly subcommand="$1"
 shift
 
+# check that subcommand is alphanumeric or underscore
 if [[ "$subcommand" =~ [^a-zA-Z0-9_] ]]; then
     die "invalid subcommand: $subcommand"
 fi
 
+# check if subcommand exists
 if [ ! -r "$SUBCOMMANDDIR/$subcommand.sh" ] ; then
     die "unknown subcommand: $subcommand"
 fi
 
+# load subcommand
 source "$SUBCOMMANDDIR/$subcommand.sh"
 
+# run subcommand
 main "$@"
