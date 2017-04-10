@@ -1,6 +1,7 @@
 # VMTools
 
-This project contains some simple bash-based VM management tools for a libvirt hypervisor. It is opinionated regarding the infrastructure.
+This project contains some simple bash-based VM management tools for a libvirt hypervisor. It is opinionated regarding
+the infrastructure.
 
 ## Assumptions
 
@@ -11,9 +12,9 @@ This project contains some simple bash-based VM management tools for a libvirt h
 
 ## Features
 
- * start a new VM using a cloud image and configure it according to a template (`vmcreate`)
- * destroy a VM and optionally its associated storages (`vmdestroy`)
- * upload cloud images to the hypervisor (`uploadimage`)
+ * start a new VM using a cloud image and configure it according to a template (`vm create`)
+ * destroy a VM and optionally its associated storages (`vm destroy`)
+ * update image disks according to image specification (`vm updateimage`)
 
 ## What you need
 
@@ -29,9 +30,9 @@ This project contains some simple bash-based VM management tools for a libvirt h
 
 ## Configuration
 
-Configuration is optional as all options either have a default value or are specified in the command line. However, if you
-want to change the storage pool's name or want to provide some defaults for the command arguments, a `$HOME/.vmtools/config`
-file can be created.
+Configuration is optional as all options either have a default value or are specified in the command line. However, if
+you want to change the storage pool's name or want to provide some defaults for the command arguments, a
+`$HOME/.vmtools/config` file can be created.
 
 ### Configuration options and default values
 
@@ -69,26 +70,23 @@ DOMAIN=
 Management of the hypervisor is done using `virsh` from libvirt. This means the scripts can be run on the hypervisor
 itself or on a remote host. `LIBVIRT_DEFAULT_URI` must be set accordingly.
 
-### Uploading an image (uploadimage)
-
-After downloading a image (e.g. Ubuntu 14.04's cloud image: https://cloud-images.ubuntu.com/xenial/current/xenial-server-cloudimg-amd64-disk1.img),
-the image can be uploaded using:
+### Update images (vm updateimage)
 
 ```bash
-# upload image to hypervisor
-uploadimage xenial-server-cloudimage-amd64-disk1.img
+# (re)download disks for ubuntu-16.04 image
+vm updateimage ubuntu-16.04
 ```
 
-### Starting a VM (vmcreate)
+### Starting a VM (vm create)
 
-A new VM with default parameters can be started by invoking:
+A new Ubuntu 16.04 vm with 2 GB memory can be started by invoking:
 
 ```bash
-vmcreate myvm --image=ubuntu-16.04
+vm create myvm --image=ubuntu-16.04 --memory=2G
 ```
 
-You can specify a different memory size (`--memory=`), resize the disks during provisioning (`--disk0-size=`) or change the number of
-virtual cpus (`--vcpus=`). To see all arguments, invoke `vmcreate --help`.
+You can specify a different memory size (`--memory=`), resize the disks during provisioning (`--disk0-size=`) or change
+the number of virtual cpus (`--vcpus=`). To see all arguments, invoke `vmcreate --help`.
 
 Memory and disk size can be specified using raw values or with a unit:
  * `1b` = 1 byte
@@ -99,25 +97,16 @@ Memory and disk size can be specified using raw values or with a unit:
  * `1M` = 1.048.576 bytes (1.024 ^ 2)
  * `1G` = 1.073.741.824 bytes (1.024 ^ 3)
 
-### Destroying a VM (vmdestroy)
+### Destroying a VM (vm destroy)
 
 A running vm can be destroyed using:
 
 ```bash
-vmdestroy myvm
+vm destroy myvm
 ```
 
-For a full list of features see `vmdestroy --help`
+For a full list of features see `vm destroy --help`
 
 ## Notes
 
- * Tested on Ubuntu 14.04.4 LTS kvm host, scripts running remotely on OSX 10.11
-
-### OSX specific
-
-Homebrew's libvirt implementation uses a different socket path for libvirt. To manage a Ubuntu host from an OSX
-machine, the correct socket path on the server must be set in the `LIBVIRT_DEFAULT_URI`.
-
-```bash
-export LIBVIRT_DEFAULT_URI=qemu+ssh://example.com/system?socket=/var/run/libvirt/libvirt-sock
-```
+ * Tested on Ubuntu 16.04.2 LTS host
