@@ -1,0 +1,2 @@
+DESCRIPTION="Ubuntu 16.04 LTS"
+DISK[0]='https://cloud-images.ubuntu.com/xenial/current/xenial-server-cloudimg-amd64-disk1.img'

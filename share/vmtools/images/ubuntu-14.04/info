@@ -1,0 +1,2 @@
+DESCRIPTION="Ubuntu 14.04 LTS"
+DISK[0]='https://cloud-images.ubuntu.com/trusty/current/trusty-server-cloudimg-amd64-disk1.img'
