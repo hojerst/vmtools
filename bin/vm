@@ -113,6 +113,18 @@ find_imagedir() {
     return 1
 }
 
+# list all images
+list_images() {
+    IFS=':' read -r -a imagepath <<<"$IMAGEPATH"
+    for imagedir in "${imagepath[@]}" ; do
+        for image in "$imagedir/"* ; do
+            if [ -r "$image"/info ] ; then
+                basename "$image"
+            fi
+        done
+    done | sort | uniq
+}
+
 ##############################################################################
 # main: subcommand selection
 ##############################################################################

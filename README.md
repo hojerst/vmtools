@@ -12,6 +12,7 @@ the infrastructure.
 
 ## Features
 
+ * list all available images (`vm images`)
  * start a new VM using a cloud image and configure it according to a template (`vm create`)
  * destroy a VM and optionally its associated storages (`vm destroy`)
  * update image disks according to image specification (`vm updateimage`)
@@ -73,6 +74,14 @@ DOMAIN=
 
 Management of the hypervisor is done using `virsh` from libvirt. This means the scripts can be run on the hypervisor
 itself or on a remote host. `LIBVIRT_DEFAULT_URI` must be set accordingly.
+
+### List available images (vm images)
+
+All available images can be listed by running
+
+```bash
+vm images
+```
 
 ### Update images (vm updateimage)
 
