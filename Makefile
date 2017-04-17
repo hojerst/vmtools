@@ -5,6 +5,4 @@ prefix=/usr/local
 all:
 
 install:
-	mkdir -p ${prefix}/share/vmtools/subcommands ${prefix}/bin
-	install share/vmtools/subcommands/*.sh ${prefix}/share/vmtools/subcommands
-	install bin/* ${prefix}/bin
+	rsync -rpE bin share "${prefix}"
