@@ -91,14 +91,14 @@ main() {
     parseargs "$@"
 
     ### sanity checks
-    [ -r "$IMAGEDIR/$IMAGE/info" ] || die "$IMAGE info doesn't exist or is not readable"
+    IMAGEDIR="$(find_imagedir "$IMAGE")" || die "image $IMAGE not found"
 
     ### work dir
     WORKDIR=$(mktemp -d /tmp/updateimageXXXXXX)
     trap "rm -rf -- '$WORKDIR'" EXIT
 
     ### main
-    source "$IMAGEDIR/$IMAGE/info"
+    source "$IMAGEDIR/info"
 
     readonly NUMDISKS=${#DISK[*]}
 

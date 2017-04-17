@@ -150,14 +150,14 @@ main() {
 
     ### sanity checks
     [ -z "$IMAGE" ] && die "no --image provided"
-    [ -d $IMAGEDIR/$IMAGE ] || die "image $IMAGE not found"
+    IMAGEDIR="$(find_imagedir "$IMAGE")" || die "image $IMAGE not found"
 
     [ $MEMSIZE_BYTES -ge 536870912 ] || die "memory size must be at least 512 mb"
     [ $VCPUS -ge 1 ] || die "need at least one cpu"
 
     virsh dominfo "$NAME" >/dev/null 2>&1 && die "vm $NAME already exists"
 
-    cd "$IMAGEDIR/$IMAGE"
+    cd "$IMAGEDIR"
     check_disks
 
     for ((i=0; i < $NUMDISKS; i++)) ; do

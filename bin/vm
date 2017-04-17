@@ -9,8 +9,9 @@ set -e
 readonly CONFDIR="$HOME/.vmtools"
 
 # defaults
-SUBCOMMANDDIR="$(cd $(dirname "${BASH_SOURCE[0]}")/../share/vmtools/subcommands && pwd)"
-IMAGEDIR="$CONFDIR/images"
+VMTOOLSDIR="$(cd $(dirname "${BASH_SOURCE[0]}")/.. && pwd)"
+SUBCOMMANDDIR="$VMTOOLSDIR/share/vmtools/subcommands"
+IMAGEPATH="$CONFDIR/images:$VMTOOLSDIR/share/vmtools/images"
 IMAGEPOOL=images
 POOL=default
 MEMSIZE=512M
@@ -94,6 +95,22 @@ get_size() {
 get_device() {
     local ALPHA=abcdefghijklmnopqrstuvwxyz
     echo vd${ALPHA:$i:1}
+}
+
+# find image directory according to IMAGEPATH
+find_imagedir() {
+    local image="$1"
+
+    IFS=':' read -r -a imagepath <<<"$IMAGEPATH"
+
+    for imagedir in "${imagepath[@]}" ; do
+        if [ -r "$imagedir/$image/info" ] ; then
+            echo "$imagedir/$image"
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 ##############################################################################
