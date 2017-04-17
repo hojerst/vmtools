@@ -24,15 +24,19 @@ the infrastructure.
 
 ## Installation
 
- * create a `$HOME/.vmtools/images` folder and copy the wanted definitions from `images/` there
- * edit the images in `$HOME/.vmtools/images/*` as needed
- * copy scripts from `bin` to a location in your `$PATH` or run them from the project file
+Installation is done by running `make install`:
+
+```bash
+# install to /usr/local
+sudo make install
+
+# install to "$HOME/vmtools" (don't forget to add $HOME/vmtools/bin to your path)
+make prefix="$HOME/vmtools" install
+```
 
 ## Configuration
 
-Configuration is optional as all options either have a default value or are specified in the command line. However, if
-you want to change the storage pool's name or want to provide some defaults for the command arguments, a
-`$HOME/.vmtools/config` file can be created.
+VMTools can be configured by editing `~/.vmtools/config`. 
 
 ### Configuration options and default values
 
