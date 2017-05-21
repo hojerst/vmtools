@@ -174,6 +174,57 @@ create_configdrive() {
 EOF
 }
 
+create_nodexml() {
+    cat >"$WORKDIR/node.xml" <<EOF
+<domain type='kvm'>
+  <name>$NAME</name>
+  <memory unit="b">$MEMSIZE_BYTES</memory>
+  <vcpu>$VCPUS</vcpu>
+  <os>
+    <type arch='x86_64' machine='pc-1.0'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+    <pae/>
+  </features>
+  <cpu mode='host-passthrough'/>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>restart</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <interface type='network'>
+      <source network='default'/>
+      <model type='virtio'/>
+      <mac address='$(random_mac)'/>
+    </interface>
+    <serial type='pty'>
+      <target port='0'/>
+    </serial>
+    <console type='pty'>
+      <target type='serial' port='0'/>
+    </console>
+    <input type='mouse' bus='ps2'/>
+    <graphics type='vnc' port='-1' autoport='yes' passwd="vnc" listen='::' />
+    <video>
+      <model type='cirrus' vram='9216' heads='1'/>
+    </video>
+    <memballoon model='virtio'/>
+    <rng model='virtio'>
+      <backend model='random'>/dev/random</backend>
+    </rng>
+    <channel type='unix'>
+      <source mode='bind' />
+      <target type='virtio' name='org.qemu.guest_agent.0'/>
+    </channel>
+  </devices>
+</domain>
+EOF
+}
+
 random_mac() {
     echo -n "02:"
     hexdump -n 5 -e '4/1 "%02X:" 1/1 "%02X" 1 "\n"' /dev/urandom
@@ -245,7 +296,7 @@ EOF
     done
 
     echo "creating domain..."
-    NAME=$NAME MEMORY=$MEMSIZE_BYTES VCPUS=$VCPUS MAC="$(random_mac)" render "node.xml" >"$WORKDIR/node.xml"
+    create_nodexml >"$WORKDIR/node.xml"
     virsh define "$WORKDIR/node.xml"
 
     echo "attaching config-drive to domain..."
