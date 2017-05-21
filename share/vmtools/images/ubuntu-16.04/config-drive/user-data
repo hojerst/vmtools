@@ -1,8 +1,5 @@
 #cloud-config
 
-# set hostname
-hostname: $NAME
-
 # upgrade packages on first boot
 # package_upgrade: true
 
