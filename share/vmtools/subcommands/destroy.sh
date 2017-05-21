@@ -9,9 +9,9 @@ SYNOPSIS
     vm destroy [options] name
 
 OPTIONS
-    --domain=<x>           dns domain of the vm
-    --(no-)remove-storage  remove storage
-    --(no-)force           do not ask
+    --domain=<x>              dns domain of the vm
+    --(no-)remove-storage,-d  remove storage
+    --(no-)force,-f           do not ask
 EOF
     exit 1
 }
@@ -43,13 +43,13 @@ parseargs() {
             --help)
                 usage
                 ;;
-            --force)
+            --force|-f)
                 FORCE=y
                 ;;
             --no-force)
                 FORCE=n
                 ;;
-            --remove-storage)
+            --remove-storage|-d)
                 REMOVESTORAGE=y
                 ;;
             --no-remove-storage)

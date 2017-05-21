@@ -9,12 +9,12 @@ SYNOPSIS
     vm create [options] name
 
 OPTIONS
-    --disk<x>-size=<size>  size of disk <x>
-    --memory=<size>        memory size of domain
-    --vcpus=<count>        number of virtual cpus
-    --image=<name>         name of image to use
-    --(no-)attach          attach to console after startup
-    --(no-)dry-run         just print summary, do not create anything
+    --disk<x>-size=<size>       size of disk <x>
+    --memory=<size>,-m <size>   memory size of domain
+    --vcpus=<count>,-c <count>  number of virtual cpus
+    --image=<name>,-i <name>    name of image to use
+    --(no-)attach,-a            attach to console after startup
+    --(no-)dry-run,-n           just print summary, do not create anything
 EOF
     exit 1
 }
@@ -60,17 +60,33 @@ parseargs() {
             --image=*)
                 IMAGE="${1##*=}"
                 ;;
-            --attach)
+            --attach|-a)
                 ATTACH=y
                 ;;
             --no-attach)
                 ATTACH=n
                 ;;
-            --dry-run)
+            --dry-run|-n)
                 DRY_RUN=y
                 ;;
             --no-dry-run)
                 DRY_RUN=n
+                ;;
+            -m)
+                MEMSIZE="${2}"
+                shift
+                ;;
+            -c)
+                VCPUS="${2}"
+                shift
+                ;;
+            -i)
+                IMAGE="${2}"
+                shift
+                ;;
+            -c)
+                VCPUS="${2}"
+                shift
                 ;;
             --)
                 shift
