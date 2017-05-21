@@ -149,12 +149,29 @@ create_iso() {
     local src="$2"
 
     if which hdiutil >/dev/null 2>&1 ; then
-        hdiutil makehybrid -default-volume-name "$CONFIGDRIVE_LABEL" -o "$iso" "$src" -iso -joliet
+        hdiutil makehybrid -default-volume-name "config-2" -o "$iso" "$src" -iso -joliet
     elif which mkisofs >/dev/null 2>&1 ; then
-        mkisofs -V "$CONFIGDRIVE_LABEL" -J -o "$iso" "$src"
+        mkisofs -V "config-2" -J -o "$iso" "$src"
     else
         die "no iso disk creator found (tried hdiutil and mkisofs)"
     fi
+}
+
+create_configdrive() {
+    local CONFIGDRIVE="$1"
+
+    mkdir -p "$CONFIGDRIVE/openstack/latest"
+
+    NAME="$NAME" render "user-data" >"$CONFIGDRIVE/openstack/latest/user_data"
+    cat >"$CONFIGDRIVE/openstack/latest/meta_data.json" <<EOF
+{
+    "availability_zone": "zone-1",
+    "hostname": "$NAME",
+    "name": "$NAME",
+    "meta": {},
+    "uuid": "$(uuidgen)"
+}
+EOF
 }
 
 random_mac() {
@@ -205,24 +222,15 @@ main() {
     trap "rm -rf -- '$WORKDIR'" EXIT
 
     ### main
-    if [ -d config-drive ] ; then
-        echo "creating config-drive image..."
+    echo "creating config-drive image..."
+    create_configdrive "$WORKDIR/config-drive"
+    create_iso "$WORKDIR/config.iso" "$WORKDIR/config-drive"
 
-        mkdir "$WORKDIR/config-drive"
-        cp -a config-drive/* "$WORKDIR/config-drive"
-        find "$WORKDIR/config-drive" -type f | while read file ; do
-            NAME="$NAME" render "$file" >"$WORKDIR/currentfile"
-            mv "$WORKDIR/currentfile" "$file"
-        done
+    echo "creating config-drive..."
+    virsh vol-create-as --pool "$POOL" --name "$NAME-config" --capacity $(get_size "$WORKDIR/config.iso") || die "failed to create volume"
 
-        create_iso "$WORKDIR/config.iso" "$WORKDIR/config-drive"
-
-        echo "creating config-drive..."
-        virsh vol-create-as --pool "$POOL" --name "$NAME-config" --capacity $(get_size "$WORKDIR/config.iso") || die "failed to create volume"
-
-        echo "uploading config-drive..."
-        virsh vol-upload --pool "$POOL" --vol "$NAME-config" --file "$WORKDIR/config.iso" || die "failed to upload image"
-    fi
+    echo "uploading config-drive..."
+    virsh vol-upload --pool "$POOL" --vol "$NAME-config" --file "$WORKDIR/config.iso" || die "failed to upload image"
 
     for ((i=0; i < $NUMDISKS; i++)) ; do
         echo "creating disk$i..."
