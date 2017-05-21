@@ -157,6 +157,11 @@ create_iso() {
     fi
 }
 
+random_mac() {
+    echo -n "02:"
+    hexdump -n 5 -e '4/1 "%02X:" 1/1 "%02X" 1 "\n"' /dev/urandom
+}
+
 main() {
     # parse arguments
     parseargs "$@"
@@ -232,7 +237,7 @@ EOF
     done
 
     echo "creating domain..."
-    NAME=$NAME MEMORY=$MEMSIZE_BYTES VCPUS=$VCPUS render "node.xml" >"$WORKDIR/node.xml"
+    NAME=$NAME MEMORY=$MEMSIZE_BYTES VCPUS=$VCPUS MAC="$(random_mac)" render "node.xml" >"$WORKDIR/node.xml"
     virsh define "$WORKDIR/node.xml"
 
     echo "attaching config-drive to domain..."
