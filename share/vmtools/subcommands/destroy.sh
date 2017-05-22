@@ -119,15 +119,15 @@ main() {
     esac
 
     if [ "$REMOVESTORAGE" = "y" ] ; then
-        echo "removing vm and storage"
+        log_action "removing vm and storage"
         virsh undefine --remove-all-storage "$NAME"
     else
-        echo "removing vm"
+        log_action "removing vm"
         virsh undefine "$NAME"
     fi
 
     if [ ! -z "$DOMAIN" ] ; then
-        echo "removing key from known hosts"
+        log_action "removing key from known hosts"
         ssh-keygen -R "$NAME.$DOMAIN"
     fi
 }

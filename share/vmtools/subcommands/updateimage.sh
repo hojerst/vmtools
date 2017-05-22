@@ -103,22 +103,22 @@ main() {
     readonly NUMDISKS=${#DISK[*]}
 
     for ((i=0; i<NUMDISKS; i++)) ; do
-        echo "downloading disk$i from ${DISK[i]}..."
+        log_action "downloading disk$i from ${DISK[i]}"
         curl "${DISK[i]}" -Lo "$WORKDIR/image"
 
-        echo "unpacking image (if compressed)..."
+        log_action "unpacking image (if compressed)"
         unpack "$WORKDIR/image"
         SIZE=$(get_size "$WORKDIR/image")
 
         if virsh vol-info --pool "$IMAGEPOOL" "$IMAGE-disk$i" >/dev/null 2>&1 ; then
-            echo "deleting old image..."
+            log_action "deleting old image"
             virsh vol-delete --pool "$IMAGEPOOL" "$IMAGE-disk$i"
         fi
 
-        echo "creating volume with $IMAGE-disk$i ($SIZE bytes)"
+        log_action "creating volume with $IMAGE-disk$i ($SIZE bytes)"
         virsh vol-create-as --pool "$IMAGEPOOL" --name "$IMAGE-disk$i" --capacity "$SIZE" --format qcow2
 
-        echo "uploading image"
+        log_action "uploading image"
         virsh vol-upload --vol "$IMAGE-disk$i" --file "$WORKDIR/image" --pool "$IMAGEPOOL"
     done
 }

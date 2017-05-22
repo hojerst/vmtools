@@ -273,14 +273,14 @@ main() {
     trap "rm -rf -- '$WORKDIR'" EXIT
 
     ### main
-    echo "creating config-drive image..."
+    log_action "creating config-drive image"
     create_configdrive "$WORKDIR/config-drive"
     create_iso "$WORKDIR/config.iso" "$WORKDIR/config-drive"
 
-    echo "creating config-drive..."
+    log_action "creating config-drive"
     virsh vol-create-as --pool "$POOL" --name "$NAME-config" --capacity $(get_size "$WORKDIR/config.iso") || die "failed to create volume"
 
-    echo "uploading config-drive..."
+    log_action "uploading config-drive"
     virsh vol-upload --pool "$POOL" --vol "$NAME-config" --file "$WORKDIR/config.iso" || die "failed to upload image"
 
     for ((i=0; i < $NUMDISKS; i++)) ; do
@@ -295,27 +295,27 @@ EOF
         virsh vol-create-from --pool "$POOL" --inputpool "$IMAGEPOOL" --vol "$IMAGE-disk$i" --file "$WORKDIR/disk$i.xml" || die "failed to copy image"
     done
 
-    echo "creating domain..."
+    log_action "creating domain"
     create_nodexml >"$WORKDIR/node.xml"
     virsh define "$WORKDIR/node.xml"
 
-    echo "attaching config-drive to domain..."
+    log_action "attaching config-drive to domain"
     path=$(virsh vol-path --pool="$POOL" --vol "$NAME-config")
     virsh attach-disk --domain "$NAME" --source "$path" --target hdc --persistent --mode readonly --type cdrom || die "failed to attach disk"
 
     for ((i=0; i < $NUMDISKS; i++)) ; do
-        echo "attaching disk$i to domain..."
+        log_action "attaching disk$i to domain"
         diskname="$NAME-disk$i"
         path=$(virsh vol-path --pool="$POOL" --vol "$diskname")
         virsh attach-disk --domain "$NAME" --source "$path" --target $(get_device $i) --persistent || die "failed to attach disk"
     done
 
-    echo "starting domain..."
+    log_action "starting domain"
     virsh start "$NAME"
     virsh autostart "$NAME"
 
     if [ "$ATTACH" = y ] ; then
-        echo "attaching to console..."
+        log_action "attaching to console"
         virsh console "$NAME"
     fi
 }
