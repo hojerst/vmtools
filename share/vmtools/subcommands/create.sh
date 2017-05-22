@@ -163,13 +163,27 @@ create_configdrive() {
     mkdir -p "$CONFIGDRIVE/openstack/latest"
 
     NAME="$NAME" render "user-data" >"$CONFIGDRIVE/openstack/latest/user_data"
+
+    local ssh_keys=""
+    local pos=0
+    for key in "${SSHKEY[@]}" ; do
+        if [ $pos != 0 ] ; then
+            ssh_keys="$ssh_keys"$',\n        '
+        fi
+        ssh_keys="$ssh_keys\"key$pos\": \"$key\""
+        pos=$((pos+1))
+    done
+
     cat >"$CONFIGDRIVE/openstack/latest/meta_data.json" <<EOF
 {
     "availability_zone": "zone-1",
     "hostname": "$NAME",
     "name": "$NAME",
     "meta": {},
-    "uuid": "$(uuidgen)"
+    "uuid": "$(uuidgen)",
+    "public_keys": {
+        $ssh_keys
+    }
 }
 EOF
 }

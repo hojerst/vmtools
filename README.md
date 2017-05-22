@@ -68,6 +68,9 @@ ATTACH=n
 
 # dns domain of vms. if you specify this, vmdestroy will also delete the hostkey from ~/.ssh/known_hosts
 DOMAIN=
+
+# ssh public key for login (multiple keys can be added by using SSHKEY[0]="..." SSHKEY[1]="..." and so on) 
+SSHKEY=
 ```
 
 ## Usage

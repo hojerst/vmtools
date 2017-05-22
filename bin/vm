@@ -21,6 +21,7 @@ DRY_RUN=n
 FORCE=n
 REMOVESTORAGE=n
 DOMAIN=
+SSHKEY=
 
 # read config file (if it exists)
 if [ -r "$CONFDIR/config" ] ; then
