@@ -113,7 +113,7 @@ main() {
     ### main
     case "$(virsh domstate "$NAME")"
         in paused|running)
-            echo "destroying vm..."
+            log_action "destroying vm"
             virsh destroy "$NAME"
             ;;
     esac
